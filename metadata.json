@@ -1,0 +1,10 @@
+{
+  "name": "NutriScan AI",
+  "description": "Intelligent food ingredient and additive analysis engine powered by Gemini AI",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
