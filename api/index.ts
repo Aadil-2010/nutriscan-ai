@@ -1,13 +1,10 @@
 import express from 'express';
-import path from 'path';
 import dotenv from 'dotenv';
-import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
 
 // High body size limit for base64 camera image uploads
 app.use(express.json({ limit: '20mb' }));
@@ -110,7 +107,6 @@ async function fetchOpenFoodFactsProduct(barcode: string) {
     return null;
   }
 
-  // List of OpenFoodFacts regional/global endpoints for highest hit rate
   const endpoints = [
     `https://world.openfoodfacts.org/api/v2/product/${cleanBarcode}.json`,
     `https://in.openfoodfacts.org/api/v2/product/${cleanBarcode}.json`,
@@ -283,7 +279,6 @@ app.post('/api/analyze', async (req, res) => {
       return res.status(400).json({ error: 'Please provide either an ingredient text, a barcode number, or a label/barcode image.' });
     }
 
-    // Check if barcodeInput is provided or if ingredients input is a numeric barcode GTIN
     let effectiveBarcode = barcodeInput ? barcodeInput.trim() : '';
     if (!effectiveBarcode && ingredients) {
       const trimmed = ingredients.trim();
@@ -292,7 +287,6 @@ app.post('/api/analyze', async (req, res) => {
       }
     }
 
-    // Attempt OpenFoodFacts DB lookup if barcode is available
     let offData: any = null;
     if (effectiveBarcode) {
       offData = await fetchOpenFoodFactsProduct(effectiveBarcode);
@@ -300,6 +294,16 @@ app.post('/api/analyze', async (req, res) => {
 
     const ai = getGeminiClient();
     let contentsParts: any[] = [];
+
+    // Shared health context string scoping fix
+    let healthContextStr = '';
+    if (healthProfile) {
+      healthContextStr = `\nUSER CLINICAL MEDICAL PROFILE & SYMPTOMS:
+User Symptoms: "${healthProfile.symptoms || 'None specified'}"
+Diagnosed Sensitivities: ${JSON.stringify(healthProfile.medicalReportAnalysis?.diagnosed_sensitivities || [])}
+Additives To Avoid From Lab Report: ${JSON.stringify(healthProfile.medicalReportAnalysis?.additives_to_avoid || [])}
+CRITICAL INSTRUCTION: If any ingredient/additive in this food product conflicts with the user's uploaded medical report or reported symptoms, add an explicit HIGH RISK warning in overall_analysis.key_warnings and mark that additive's safety_rating as "High Concern".`;
+    }
 
     if (image) {
       let mimeType = 'image/jpeg';
@@ -321,15 +325,6 @@ app.post('/api/analyze', async (req, res) => {
           data: base64Data,
         },
       });
-
-      let healthContextStr = '';
-      if (healthProfile) {
-        healthContextStr = `\nUSER CLINICAL MEDICAL PROFILE & SYMPTOMS:
-User Symptoms: "${healthProfile.symptoms || 'None specified'}"
-Diagnosed Sensitivities: ${JSON.stringify(healthProfile.medicalReportAnalysis?.diagnosed_sensitivities || [])}
-Additives To Avoid From Lab Report: ${JSON.stringify(healthProfile.medicalReportAnalysis?.additives_to_avoid || [])}
-CRITICAL INSTRUCTION: If any ingredient/additive in this food product conflicts with the user's uploaded medical report or reported symptoms, add a explicit HIGH RISK warning in overall_analysis.key_warnings and mark that additive's safety_rating as "High Concern".`;
-      }
 
       let promptText = `Examine this image for barcodes (UPC, EAN-13, EAN-8, QR codes) and food label ingredient text.`;
       if (offData) {
@@ -398,7 +393,6 @@ ${offData ? `Crucial: In "scan_data", set "barcode_detected": true, "barcode_num
       }
     }
 
-    // Attach OpenFoodFacts image or brand if available and missing
     if (offData) {
       if (parsedData.scan_data) {
         parsedData.scan_data.barcode_detected = true;
@@ -423,30 +417,12 @@ ${offData ? `Crucial: In "scan_data", set "barcode_detected": true, "barcode_num
   }
 });
 
-async function startServer() {
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
-
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`NutriScan AI server listening on http://0.0.0.0:${PORT}`);
+// Run local listener only when developing locally (outside Vercel)
+if (!process.env.VERCEL) {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`Server listening locally on http://localhost:${PORT}`);
   });
 }
-
-startServer();
-// At the bottom of server.ts:
-app.listen(3000, () => {
-  console.log("Server running");
-});
 
 export default app;
