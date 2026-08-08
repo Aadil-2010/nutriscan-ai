@@ -6,15 +6,16 @@ import {
   RotateCcw, 
   SlidersHorizontal, 
   FileText, 
-  Zap,
   ArrowRight,
   Barcode,
-  Database
+  Database,
+  Tag
 } from 'lucide-react';
-import { SAMPLE_PRODUCTS } from '../data/sampleProducts';
 import { UserPreferences, PresetSample } from '../types';
 
 interface ScannerTabProps {
+  productNameInput?: string;
+  setProductNameInput?: (val: string) => void;
   ingredientInput: string;
   setIngredientInput: (val: string) => void;
   barcodeInput: string;
@@ -25,10 +26,12 @@ interface ScannerTabProps {
   openCamera: (mode: 'label' | 'barcode') => void;
   onAnalyze: () => void;
   isLoading: boolean;
-  onSelectSample: (sample: PresetSample) => void;
+  onSelectSample?: (sample: PresetSample) => void;
 }
 
 export const ScannerTab: React.FC<ScannerTabProps> = ({
+  productNameInput = '',
+  setProductNameInput,
   ingredientInput,
   setIngredientInput,
   barcodeInput,
@@ -39,7 +42,6 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
   openCamera,
   onAnalyze,
   isLoading,
-  onSelectSample,
 }) => {
   const [dragActive, setDragActive] = useState(false);
 
@@ -83,9 +85,25 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
   };
 
   const handleClear = () => {
+    if (setProductNameInput) setProductNameInput('');
     setIngredientInput('');
     setBarcodeInput('');
     setSelectedImage(null);
+  };
+
+  // Sample barcodes with clear product names
+  const SAMPLE_BARCODES = [
+    { label: 'Coca-Cola', code: '5449000000996', name: 'Coca-Cola Original Taste' },
+    { label: 'Thai Rice Noodles', code: '0737628064502', name: 'Thai Kitchen Stir-Fry Rice Noodles' },
+    { label: 'Nutella', code: '3017620422003', name: 'Nutella Hazelnut Spread' },
+    { label: 'Snickers', code: '5000159407236', name: 'Snickers Milk Chocolate Bar' },
+  ];
+
+  const handleSelectQuickBarcode = (item: { label: string; code: string; name: string }) => {
+    setBarcodeInput(item.code);
+    if (setProductNameInput) {
+      setProductNameInput(item.name);
+    }
   };
 
   // Count active presets + custom sensitivities
@@ -96,14 +114,6 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
   
   const customSensitivitiesCount = userPreferences.customSensitivities?.length || 0;
   const totalActiveFlagsCount = activePresetCount + customSensitivitiesCount;
-
-  // Sample barcodes for quick testing
-  const SAMPLE_BARCODES = [
-    { label: 'Coca-Cola (5449000000996)', code: '5449000000996' },
-    { label: 'Thai Rice Noodles (0737628064502)', code: '0737628064502' },
-    { label: 'Nutella Hazelnut (3017620422003)', code: '3017620422003' },
-    { label: 'Snickers Bar (5000159407236)', code: '5000159407236' },
-  ];
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
@@ -119,36 +129,30 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
         </div>
       </div>
 
-      {/* Preset Sample Quick Loader */}
-      <div className="space-y-2.5">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center">
-            <Zap className="w-3.5 h-3.5 mr-1 text-emerald-400 flex-shrink-0" />
-            Quick Test Examples
-          </span>
-          <span className="text-[11px] text-slate-500">Tap to load sample</span>
-        </div>
-        
-        <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-none sm:grid sm:grid-cols-3 md:grid-cols-6 sm:pb-0">
-          {SAMPLE_PRODUCTS.map((sample) => (
-            <button
-              key={sample.id}
-              onClick={() => onSelectSample(sample)}
-              className="p-2.5 sm:p-3 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800/80 hover:border-emerald-500/40 text-left transition-all group flex-shrink-0 w-36 sm:w-auto"
-            >
-              <div className="text-xs font-bold text-slate-200 group-hover:text-emerald-400 transition-colors truncate">
-                {sample.name}
-              </div>
-              <div className="text-[10px] text-slate-400 mt-0.5 truncate">{sample.category}</div>
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Main Scanner Workspace Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6">
-        {/* Left Column: Text Input, Barcode Lookup, & Image Upload */}
+        {/* Left Column: Product Name, Barcode, Text Input & Image Upload */}
         <div className="lg:col-span-8 space-y-5 sm:space-y-6">
+
+          {/* Product / Item Name Input */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-2">
+            <label htmlFor="product-name-input" className="text-xs sm:text-sm font-semibold text-slate-200 flex items-center justify-between">
+              <span className="flex items-center">
+                <Tag className="w-4 h-4 mr-2 text-emerald-400 flex-shrink-0" />
+                Product / Item Name
+              </span>
+              <span className="text-[10px] text-slate-400 font-normal">(Optional or Auto-Detected)</span>
+            </label>
+            <input
+              id="product-name-input"
+              type="text"
+              value={productNameInput}
+              onChange={(e) => setProductNameInput && setProductNameInput(e.target.value)}
+              placeholder="e.g. Coca-Cola Original, Doritos Nacho Cheese, Custom Energy Bar..."
+              className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/60 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 outline-none transition-all"
+            />
+          </div>
+
           {/* Barcode Search Box */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3">
             <div className="flex items-center justify-between">
@@ -201,7 +205,7 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
               {SAMPLE_BARCODES.map((item) => (
                 <button
                   key={item.code}
-                  onClick={() => setBarcodeInput(item.code)}
+                  onClick={() => handleSelectQuickBarcode(item)}
                   className="text-[11px] px-2 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 hover:text-cyan-400 transition-all font-mono"
                 >
                   {item.label}
@@ -217,7 +221,7 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
                 <FileText className="w-4 h-4 mr-2 text-emerald-400 flex-shrink-0" />
                 Paste or Type Ingredients List
               </label>
-              {(ingredientInput || selectedImage || barcodeInput) && (
+              {(ingredientInput || selectedImage || barcodeInput || productNameInput) && (
                 <button
                   onClick={handleClear}
                   className="text-xs text-slate-400 hover:text-rose-400 flex items-center transition-colors min-h-[32px] px-1"
