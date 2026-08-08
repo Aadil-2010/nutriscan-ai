@@ -444,4 +444,9 @@ async function startServer() {
 }
 
 startServer();
+// At the bottom of server.ts:
+app.listen(3000, () => {
+  console.log("Server running");
+});
+
 export default app;
