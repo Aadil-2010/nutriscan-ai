@@ -6,13 +6,10 @@ import {
   RotateCcw, 
   SlidersHorizontal, 
   FileText, 
-  CheckCircle2, 
-  AlertCircle,
   Zap,
   ArrowRight,
   Barcode,
-  Database,
-  Search
+  Database
 } from 'lucide-react';
 import { SAMPLE_PRODUCTS } from '../data/sampleProducts';
 import { UserPreferences, PresetSample } from '../types';
@@ -24,8 +21,8 @@ interface ScannerTabProps {
   setBarcodeInput: (val: string) => void;
   selectedImage: string | null;
   setSelectedImage: (val: string | null) => void;
-  userPreferences: UserPreferences;
-  openCamera: () => void;
+  userPreferences: UserPreferences & { customSensitivities?: string[] };
+  openCamera: (mode: 'label' | 'barcode') => void;
   onAnalyze: () => void;
   isLoading: boolean;
   onSelectSample: (sample: PresetSample) => void;
@@ -91,9 +88,16 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
     setSelectedImage(null);
   };
 
-  const activePrefCount = Object.values(userPreferences).filter(Boolean).length;
+  // Count active presets + custom sensitivities
+  const activePresetCount = Object.entries(userPreferences).filter(([key, val]) => {
+    if (key === 'customSensitivities') return false;
+    return Boolean(val);
+  }).length;
+  
+  const customSensitivitiesCount = userPreferences.customSensitivities?.length || 0;
+  const totalActiveFlagsCount = activePresetCount + customSensitivitiesCount;
 
-  // Popular sample barcodes for quick testing with OpenFoodFacts
+  // Sample barcodes for quick testing
   const SAMPLE_BARCODES = [
     { label: 'Coca-Cola (5449000000996)', code: '5449000000996' },
     { label: 'Thai Rice Noodles (0737628064502)', code: '0737628064502' },
@@ -115,7 +119,7 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
         </div>
       </div>
 
-      {/* Preset Sample Quick Loader (Horizontal scroll on mobile) */}
+      {/* Preset Sample Quick Loader */}
       <div className="space-y-2.5">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center">
@@ -125,7 +129,6 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
           <span className="text-[11px] text-slate-500">Tap to load sample</span>
         </div>
         
-        {/* Scrollable on mobile, grid on desktop */}
         <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-none sm:grid sm:grid-cols-3 md:grid-cols-6 sm:pb-0">
           {SAMPLE_PRODUCTS.map((sample) => (
             <button
@@ -167,20 +170,32 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
                   value={barcodeInput}
                   onChange={(e) => setBarcodeInput(e.target.value)}
                   placeholder="e.g. 5449000000996, 0737628064502, 3017620422003..."
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500/60 focus:ring-1 focus:ring-cyan-500/60 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 outline-none transition-all font-mono"
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500/60 focus:ring-1 focus:ring-cyan-500/60 rounded-xl pl-3.5 pr-20 py-2.5 text-sm text-slate-100 placeholder-slate-500 outline-none transition-all font-mono"
                 />
-                {barcodeInput && (
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center space-x-1">
+                  {barcodeInput && (
+                    <button
+                      type="button"
+                      onClick={() => setBarcodeInput('')}
+                      className="text-xs text-slate-500 hover:text-slate-300 px-1"
+                    >
+                      ✕
+                    </button>
+                  )}
                   <button
-                    onClick={() => setBarcodeInput('')}
-                    className="absolute right-3 top-2.5 text-xs text-slate-500 hover:text-slate-300"
+                    type="button"
+                    onClick={() => openCamera('barcode')}
+                    className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 text-xs font-bold border border-cyan-500/40 transition-colors"
+                    title="Open Live Barcode Scanner"
                   >
-                    ✕
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>Scan</span>
                   </button>
-                )}
+                </div>
               </div>
             </div>
 
-            {/* Quick Barcode pills */}
+            {/* Quick Barcode Pills */}
             <div className="flex flex-wrap items-center gap-1.5 pt-1">
               <span className="text-[11px] text-slate-500 mr-1">Quick Barcodes:</span>
               {SAMPLE_BARCODES.map((item) => (
@@ -222,10 +237,10 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
             />
           </div>
 
-          {/* Camera & File Upload Dropzone */}
+          {/* Camera Triggers & File Upload Dropzone */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3.5">
             <span className="text-xs sm:text-sm font-semibold text-slate-200 block">
-              Or Attach Package Label Image
+              Or Scan Live Barcode / Attach Package Label
             </span>
 
             {selectedImage ? (
@@ -239,26 +254,40 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Camera Trigger */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* 1. Live Barcode Auto-Scanner Trigger */}
                 <button
-                  onClick={openCamera}
-                  className="flex items-center sm:flex-col sm:justify-center p-3.5 sm:p-6 rounded-xl bg-slate-950 hover:bg-slate-800/80 border border-slate-800 hover:border-emerald-500/50 text-slate-300 hover:text-emerald-400 transition-all group min-h-[52px]"
+                  type="button"
+                  onClick={() => openCamera('barcode')}
+                  className="flex items-center sm:flex-col sm:justify-center p-3.5 sm:p-5 rounded-xl bg-slate-950 hover:bg-slate-800/80 border border-slate-800 hover:border-cyan-500/50 text-slate-300 hover:text-cyan-400 transition-all group min-h-[52px]"
                 >
-                  <Camera className="w-6 h-6 sm:w-8 sm:h-8 text-emerald-400 mr-3 sm:mr-0 sm:mb-2 group-hover:scale-110 transition-transform flex-shrink-0" />
+                  <Barcode className="w-6 h-6 sm:w-7 sm:h-7 text-cyan-400 mr-3 sm:mr-0 sm:mb-2 group-hover:scale-110 transition-transform flex-shrink-0" />
                   <div className="text-left sm:text-center">
-                    <span className="text-xs sm:text-sm font-bold block">Use Device Camera</span>
-                    <span className="text-[10px] sm:text-[11px] text-slate-400 block sm:mt-0.5">Snapshot label directly</span>
+                    <span className="text-xs sm:text-sm font-bold block">Scan Barcode Live</span>
+                    <span className="text-[10px] text-slate-400 block sm:mt-0.5">Auto-detects code</span>
                   </div>
                 </button>
 
-                {/* File upload */}
+                {/* 2. Label Photo Trigger */}
+                <button
+                  type="button"
+                  onClick={() => openCamera('label')}
+                  className="flex items-center sm:flex-col sm:justify-center p-3.5 sm:p-5 rounded-xl bg-slate-950 hover:bg-slate-800/80 border border-slate-800 hover:border-emerald-500/50 text-slate-300 hover:text-emerald-400 transition-all group min-h-[52px]"
+                >
+                  <Camera className="w-6 h-6 sm:w-7 sm:h-7 text-emerald-400 mr-3 sm:mr-0 sm:mb-2 group-hover:scale-110 transition-transform flex-shrink-0" />
+                  <div className="text-left sm:text-center">
+                    <span className="text-xs sm:text-sm font-bold block">Take Label Photo</span>
+                    <span className="text-[10px] text-slate-400 block sm:mt-0.5">Snapshot ingredients</span>
+                  </div>
+                </button>
+
+                {/* 3. File Upload */}
                 <div
                   onDragEnter={handleDrag}
                   onDragLeave={handleDrag}
                   onDragOver={handleDrag}
                   onDrop={handleDrop}
-                  className={`flex items-center sm:flex-col sm:justify-center p-3.5 sm:p-6 rounded-xl bg-slate-950 border ${
+                  className={`flex items-center sm:flex-col sm:justify-center p-3.5 sm:p-5 rounded-xl bg-slate-950 border ${
                     dragActive ? 'border-emerald-500 bg-emerald-500/5' : 'border-slate-800 hover:border-emerald-500/50'
                   } text-slate-300 transition-all cursor-pointer relative group min-h-[52px]`}
                 >
@@ -268,10 +297,10 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
                     onChange={handleFileUpload}
                     className="absolute inset-0 opacity-0 cursor-pointer"
                   />
-                  <Upload className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400 mr-3 sm:mr-0 sm:mb-2 group-hover:scale-110 transition-transform flex-shrink-0" />
+                  <Upload className="w-6 h-6 sm:w-7 sm:h-7 text-teal-400 mr-3 sm:mr-0 sm:mb-2 group-hover:scale-110 transition-transform flex-shrink-0" />
                   <div className="text-left sm:text-center">
-                    <span className="text-xs sm:text-sm font-bold block">Upload Label Image</span>
-                    <span className="text-[10px] sm:text-[11px] text-slate-400 block sm:mt-0.5">JPG, PNG, WEBP</span>
+                    <span className="text-xs sm:text-sm font-bold block">Upload File</span>
+                    <span className="text-[10px] text-slate-400 block sm:mt-0.5">JPG, PNG, WEBP</span>
                   </div>
                 </div>
               </div>
@@ -301,47 +330,69 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
           </div>
         </div>
 
-        {/* Right Column: Health Sensitivity Flags & Desktop Submit Action */}
+        {/* Right Column: Active Sensitivity Flags Sidebar */}
         <div className="lg:col-span-4 space-y-5 sm:space-y-6">
-          {/* Active Sensitivity Profile */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3.5">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center">
                 <SlidersHorizontal className="w-3.5 h-3.5 mr-1.5 text-emerald-400 flex-shrink-0" />
                 Active Sensitivity Flags
               </span>
-              <span className="text-xs text-emerald-400 font-semibold">{activePrefCount} Active</span>
+              <span className="text-xs font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                {totalActiveFlagsCount} Active
+              </span>
             </div>
 
             <div className="space-y-2 text-xs text-slate-300">
-              <div className="flex items-center justify-between p-2 rounded-lg bg-slate-950 border border-slate-800/80">
-                <span className="truncate mr-2">Asthma / Sulfites Warning</span>
-                <span className={userPreferences.asthmaSulfiteAlert ? 'text-emerald-400 font-bold flex-shrink-0' : 'text-slate-500 flex-shrink-0'}>
-                  {userPreferences.asthmaSulfiteAlert ? 'ON' : 'OFF'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between p-2 rounded-lg bg-slate-950 border border-slate-800/80">
-                <span className="truncate mr-2">Gut Microbiota Focus</span>
-                <span className={userPreferences.gutHealthFocus ? 'text-emerald-400 font-bold flex-shrink-0' : 'text-slate-500 flex-shrink-0'}>
-                  {userPreferences.gutHealthFocus ? 'ON' : 'OFF'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between p-2 rounded-lg bg-slate-950 border border-slate-800/80">
-                <span className="truncate mr-2">Children Hyperactivity Watch</span>
-                <span className={userPreferences.kidsSafetyFocus ? 'text-emerald-400 font-bold flex-shrink-0' : 'text-slate-500 flex-shrink-0'}>
-                  {userPreferences.kidsSafetyFocus ? 'ON' : 'OFF'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between p-2 rounded-lg bg-slate-950 border border-slate-800/80">
-                <span className="truncate mr-2">FSSAI / India Limits</span>
-                <span className={userPreferences.fssaiIndiaFocus ? 'text-emerald-400 font-bold flex-shrink-0' : 'text-slate-500 flex-shrink-0'}>
-                  {userPreferences.fssaiIndiaFocus ? 'ON' : 'OFF'}
-                </span>
-              </div>
+              {/* Only render active preset flags */}
+              {userPreferences.asthmaSulfiteAlert && (
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-500/40">
+                  <span className="truncate mr-2 font-medium">Asthma / Sulfites Warning</span>
+                  <span className="font-bold text-emerald-400">ON</span>
+                </div>
+              )}
+
+              {userPreferences.gutHealthFocus && (
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-500/40">
+                  <span className="truncate mr-2 font-medium">Gut Microbiota Focus</span>
+                  <span className="font-bold text-emerald-400">ON</span>
+                </div>
+              )}
+
+              {userPreferences.kidsSafetyFocus && (
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-500/40">
+                  <span className="truncate mr-2 font-medium">Children Hyperactivity Watch</span>
+                  <span className="font-bold text-emerald-400">ON</span>
+                </div>
+              )}
+
+              {userPreferences.fssaiIndiaFocus && (
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-500/40">
+                  <span className="truncate mr-2 font-medium">FSSAI / India Limits</span>
+                  <span className="font-bold text-emerald-400">ON</span>
+                </div>
+              )}
+
+              {/* Render custom sensitivities added by user */}
+              {userPreferences.customSensitivities && userPreferences.customSensitivities.length > 0 && (
+                userPreferences.customSensitivities.map((item: string, idx: number) => (
+                  <div key={idx} className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-500/40">
+                    <span className="truncate mr-2 font-medium">{item}</span>
+                    <span className="font-bold text-emerald-400">CUSTOM</span>
+                  </div>
+                ))
+              )}
+
+              {/* Clean Empty State when no flags are active */}
+              {totalActiveFlagsCount === 0 && (
+                <div className="p-4 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 text-center text-xs text-slate-500">
+                  No active health sensitivities selected. Click <span className="text-emerald-400 font-semibold">Filters</span> in navigation to add active flags.
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Action Trigger Button for Desktop View */}
+          {/* Desktop Submit Button */}
           <div className="hidden lg:block">
             <button
               disabled={isLoading || (!ingredientInput.trim() && !selectedImage && !barcodeInput.trim())}
