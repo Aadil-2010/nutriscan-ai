@@ -26,7 +26,7 @@ const STORAGE_KEY_USER = 'nutriscan_ai_user_profile_v1';
 export default function App() {
   const [activeTab, setActiveTab] = useState<'scanner' | 'health-profile' | 'directory' | 'calculator' | 'guide' | 'history'>('scanner');
   
-  // User Authentication State (Default view is AuthScreen if not logged in)
+  // User Authentication State
   const [userProfile, setUserProfile] = useState<UserProfile | null>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_USER);
@@ -51,6 +51,7 @@ export default function App() {
   const [isCameraOpen, setIsCameraOpen] = useState<boolean>(false);
   const [selectedAdditiveModal, setSelectedAdditiveModal] = useState<AdditiveItem | null>(null);
   const [isPrefsOpen, setIsPrefsOpen] = useState<boolean>(false);
+  const [showEthicalBoard, setShowEthicalBoard] = useState<boolean>(false);
 
   // User health preferences state
   const [userPreferences, setUserPreferences] = useState<UserPreferences>(() => {
@@ -211,7 +212,6 @@ export default function App() {
 
   const activePreferenceCount = Object.values(userPreferences).filter(Boolean).length;
 
-  // Default view is User Login / Registration Screen if user is not authenticated
   if (!userProfile || !userProfile.isLoggedIn) {
     return <AuthScreen onLoginSuccess={handleLoginSuccess} />;
   }
@@ -228,6 +228,54 @@ export default function App() {
         userProfile={userProfile}
         onLogout={handleLogout}
       />
+
+      {/* Exhibition Board Disclaimer Banner Toggle */}
+      <div className="bg-slate-900/90 border-b border-slate-800 py-2 px-4 text-xs">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center space-x-2 text-slate-300">
+            <span className="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[10px]">
+              Scientific Framework
+            </span>
+            <span>Personalised Food Suitability & Allergen Screening Standard</span>
+          </div>
+          <button 
+            onClick={() => setShowEthicalBoard(!showEthicalBoard)}
+            className="text-emerald-400 hover:text-emerald-300 font-medium underline cursor-pointer"
+          >
+            {showEthicalBoard ? 'Hide Exhibition Board Rules' : '📋 View Ethical & Safety Framework'}
+          </button>
+        </div>
+      </div>
+
+      {/* Exhibition Board Panel (Teacher Requested Rules) */}
+      {showEthicalBoard && (
+        <div className="bg-slate-900 border-b border-emerald-500/30 p-5 text-sm">
+          <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-rose-950/30 border border-rose-500/30 rounded-xl p-4">
+              <h4 className="font-bold text-rose-400 text-base mb-2 flex items-center gap-2">
+                ❌ FOODWISE DOES NOT:
+              </h4>
+              <ul className="space-y-1.5 text-slate-300 text-xs list-disc pl-5">
+                <li>Diagnose medical conditions or food allergies.</li>
+                <li>Replace a licensed doctor, nutritionist, or dietitian.</li>
+                <li>Guarantee that a food product is 100% safe for all individuals.</li>
+                <li>Declare ingredients "toxic" without toxicological evidence (NOAEL/ADI).</li>
+              </ul>
+            </div>
+            <div className="bg-emerald-950/30 border border-emerald-500/30 rounded-xl p-4">
+              <h4 className="font-bold text-emerald-400 text-base mb-2 flex items-center gap-2">
+                ✅ FOODWISE DOES:
+              </h4>
+              <ul className="space-y-1.5 text-slate-300 text-xs list-disc pl-5">
+                <li>Calculate a Personalised Food Suitability Score based on context.</li>
+                <li>Highlight potential allergens and "may contain traces of" cross-contamination.</li>
+                <li>Explain nutritional information and food label codes objectively.</li>
+                <li>Empower consumers with regulatory standards (FSSAI, FDA, EFSA).</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Error Alert Toast */}
       {errorMsg && (
@@ -246,6 +294,26 @@ export default function App() {
 
       {/* Main Content Workspace Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 pb-24 md:pb-8">
+        {/* Top Priority Allergen Alert Banner */}
+        {analysisResult?.allergen_alert?.detected && (
+          <div className="mb-6 bg-red-950/90 border-2 border-red-500 text-red-100 p-5 rounded-2xl shadow-2xl animate-pulse">
+            <div className="flex items-start gap-3">
+              <span className="text-3xl">🔴</span>
+              <div>
+                <h3 className="text-lg font-extrabold text-red-300 tracking-wide uppercase">
+                  ALLERGEN ALERT: {analysisResult.allergen_alert.allergen_name || 'Known Allergen Detected'}
+                </h3>
+                <p className="mt-1 text-sm text-red-200 font-medium">
+                  {analysisResult.allergen_alert.message || 'Ingredient or trace warning detected. Avoid this product and check physical packaging.'}
+                </p>
+                <div className="mt-2 text-xs bg-red-900/60 text-red-300 inline-block px-2.5 py-1 rounded-md border border-red-700/50">
+                  Warning Type: {analysisResult.allergen_alert.warning_type || 'Direct Ingredient / Cross-Contamination Warning'}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {activeTab === 'scanner' && (
           analysisResult ? (
             <AnalysisResults
@@ -264,7 +332,7 @@ export default function App() {
               selectedImage={selectedImage}
               setSelectedImage={setSelectedImage}
               userPreferences={userPreferences}
-              openCamera={() => setIsCameraOpen(true)}
+              openCamera={() => setIsCameraOpen(false)}
               onAnalyze={handleAnalyze}
               isLoading={isLoading}
               onSelectSample={handleSelectSample}
@@ -306,9 +374,9 @@ export default function App() {
       <footer className="border-t border-slate-800/80 bg-slate-900/60 py-6 text-center text-xs text-slate-400">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center space-x-2">
-            <span className="font-bold text-slate-200">NutriScan AI</span>
+            <span className="font-bold text-slate-200">FoodWise / NutriScan AI</span>
             <span>•</span>
-            <span>Scientific Food Additive & Ingredient Safety Engine</span>
+            <span>Scientific Food Additive & Suitability Engine</span>
           </div>
           <div className="text-slate-400">
             FSSAI (India) • FDA (USA) • EFSA (EU) Reference Standards
@@ -326,13 +394,13 @@ export default function App() {
         }}
       />
 
-      {/* Additive Toxicology Detail Modal */}
+      {/* Additive Detail Modal */}
       <AdditiveDetailModal
         additive={selectedAdditiveModal}
         onClose={() => setSelectedAdditiveModal(null)}
       />
 
-      {/* Health Sensitivity Preferences Modal */}
+      {/* Health Preferences Modal */}
       <PreferencesModal
         isOpen={isPrefsOpen}
         onClose={() => setIsPrefsOpen(false)}
