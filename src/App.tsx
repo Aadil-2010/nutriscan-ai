@@ -53,7 +53,7 @@ export default function App() {
   const [isPrefsOpen, setIsPrefsOpen] = useState<boolean>(false);
   const [showEthicalBoard, setShowEthicalBoard] = useState<boolean>(false);
 
-  // User health preferences state
+  // User health preferences state (DEFAULT SETTINGS: ALL CLEAR)
   const [userPreferences, setUserPreferences] = useState<UserPreferences>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_PREFS);
@@ -62,11 +62,12 @@ export default function App() {
       console.error('Error loading preferences from localStorage:', e);
     }
     return {
-      asthmaSulfiteAlert: true,
-      gutHealthFocus: true,
-      kidsSafetyFocus: true,
-      fssaiIndiaFocus: true,
-      igeAllergyProne: true,
+      asthmaSulfiteAlert: false,
+      gutHealthFocus: false,
+      kidsSafetyFocus: false,
+      fssaiIndiaFocus: false,
+      igeAllergyProne: false,
+      customSensitivities: [],
     };
   });
 
@@ -210,7 +211,12 @@ export default function App() {
     analysisResult && savedScans.some((s) => s.id === analysisResult.id)
   );
 
-  const activePreferenceCount = Object.values(userPreferences).filter(Boolean).length;
+  const activePreferenceCount = (
+    Object.entries(userPreferences).filter(([key, val]) => {
+      if (key === 'customSensitivities') return Array.isArray(val) && val.length > 0;
+      return Boolean(val);
+    }).length
+  );
 
   if (!userProfile || !userProfile.isLoggedIn) {
     return <AuthScreen onLoginSuccess={handleLoginSuccess} />;
@@ -247,7 +253,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* Exhibition Board Panel (Teacher Requested Rules) */}
+      {/* Exhibition Board Panel */}
       {showEthicalBoard && (
         <div className="bg-slate-900 border-b border-emerald-500/30 p-5 text-sm">
           <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -332,7 +338,7 @@ export default function App() {
               selectedImage={selectedImage}
               setSelectedImage={setSelectedImage}
               userPreferences={userPreferences}
-              openCamera={() => setIsCameraOpen(false)}
+              openCamera={() => setIsCameraOpen(true)}
               onAnalyze={handleAnalyze}
               isLoading={isLoading}
               onSelectSample={handleSelectSample}
