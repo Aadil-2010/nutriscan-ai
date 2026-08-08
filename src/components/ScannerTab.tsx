@@ -91,7 +91,6 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
     setSelectedImage(null);
   };
 
-  // Sample barcodes with clear product names
   const SAMPLE_BARCODES = [
     { label: 'Coca-Cola', code: '5449000000996', name: 'Coca-Cola Original Taste' },
     { label: 'Thai Rice Noodles', code: '0737628064502', name: 'Thai Kitchen Stir-Fry Rice Noodles' },
@@ -106,7 +105,6 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
     }
   };
 
-  // Count active presets + custom sensitivities
   const activePresetCount = Object.entries(userPreferences).filter(([key, val]) => {
     if (key === 'customSensitivities') return false;
     return Boolean(val);
@@ -129,19 +127,19 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
         </div>
       </div>
 
-      {/* Main Scanner Workspace Grid */}
+      {/* Workspace Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6">
         {/* Left Column: Product Name, Barcode, Text Input & Image Upload */}
         <div className="lg:col-span-8 space-y-5 sm:space-y-6">
 
-          {/* Product / Item Name Input */}
+          {/* Item Name Field */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-2">
             <label htmlFor="product-name-input" className="text-xs sm:text-sm font-semibold text-slate-200 flex items-center justify-between">
               <span className="flex items-center">
                 <Tag className="w-4 h-4 mr-2 text-emerald-400 flex-shrink-0" />
                 Product / Item Name
               </span>
-              <span className="text-[10px] text-slate-400 font-normal">(Optional or Auto-Detected)</span>
+              <span className="text-[10px] text-slate-400 font-normal">(Optional)</span>
             </label>
             <input
               id="product-name-input"
@@ -153,7 +151,7 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
             />
           </div>
 
-          {/* Barcode Search Box */}
+          {/* Barcode Input */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3">
             <div className="flex items-center justify-between">
               <label htmlFor="barcode-input" className="text-xs sm:text-sm font-semibold text-slate-200 flex items-center">
@@ -173,7 +171,7 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
                   type="text"
                   value={barcodeInput}
                   onChange={(e) => setBarcodeInput(e.target.value)}
-                  placeholder="e.g. 5449000000996, 0737628064502, 3017620422003..."
+                  placeholder="e.g. 5449000000996, 0737628064502..."
                   className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500/60 focus:ring-1 focus:ring-cyan-500/60 rounded-xl pl-3.5 pr-20 py-2.5 text-sm text-slate-100 placeholder-slate-500 outline-none transition-all font-mono"
                 />
                 <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center space-x-1">
@@ -190,7 +188,6 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
                     type="button"
                     onClick={() => openCamera('barcode')}
                     className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 text-xs font-bold border border-cyan-500/40 transition-colors"
-                    title="Open Live Barcode Scanner"
                   >
                     <Camera className="w-3.5 h-3.5" />
                     <span>Scan</span>
@@ -199,7 +196,7 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
               </div>
             </div>
 
-            {/* Quick Barcode Pills */}
+            {/* Quick Barcodes */}
             <div className="flex flex-wrap items-center gap-1.5 pt-1">
               <span className="text-[11px] text-slate-500 mr-1">Quick Barcodes:</span>
               {SAMPLE_BARCODES.map((item) => (
@@ -214,7 +211,7 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
             </div>
           </div>
 
-          {/* Ingredient Text Box */}
+          {/* Ingredient Text Field */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3">
             <div className="flex items-center justify-between">
               <label htmlFor="ingredient-textarea" className="text-xs sm:text-sm font-semibold text-slate-200 flex items-center">
@@ -236,20 +233,20 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
               id="ingredient-textarea"
               value={ingredientInput}
               onChange={(e) => setIngredientInput(e.target.value)}
-              placeholder="e.g. Carbonated Water, Sugar, Citric Acid (INS 330), Sodium Benzoate (INS 211), Tartrazine (INS 102), Ascorbic Acid..."
+              placeholder="e.g. Carbonated Water, Sugar, Citric Acid (INS 330), Sodium Benzoate (INS 211), Tartrazine (INS 102)..."
               className="w-full h-28 sm:h-32 bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/60 rounded-xl p-3 text-base sm:text-sm text-slate-100 placeholder-slate-500 resize-none outline-none transition-all"
             />
           </div>
 
-          {/* Camera Triggers & File Upload Dropzone */}
+          {/* Camera Triggers & Dropzone */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3.5">
             <span className="text-xs sm:text-sm font-semibold text-slate-200 block">
-              Or Scan Live Barcode / Attach Package Label
+              Or Capture Image / Attach Package Label
             </span>
 
             {selectedImage ? (
               <div className="relative rounded-xl overflow-hidden border border-slate-800 bg-slate-950 p-2 max-h-64 flex items-center justify-center">
-                <img src={selectedImage} alt="Uploaded food label" className="max-h-52 object-contain rounded-lg" />
+                <img src={selectedImage} alt="Uploaded label" className="max-h-52 object-contain rounded-lg" />
                 <button
                   onClick={() => setSelectedImage(null)}
                   className="absolute top-3 right-3 px-2.5 py-1.5 rounded-lg bg-slate-900/90 text-xs font-semibold text-slate-200 hover:text-white border border-slate-700 shadow-md"
@@ -259,7 +256,6 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {/* 1. Live Barcode Auto-Scanner Trigger */}
                 <button
                   type="button"
                   onClick={() => openCamera('barcode')}
@@ -267,12 +263,11 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
                 >
                   <Barcode className="w-6 h-6 sm:w-7 sm:h-7 text-cyan-400 mr-3 sm:mr-0 sm:mb-2 group-hover:scale-110 transition-transform flex-shrink-0" />
                   <div className="text-left sm:text-center">
-                    <span className="text-xs sm:text-sm font-bold block">Scan Barcode Live</span>
-                    <span className="text-[10px] text-slate-400 block sm:mt-0.5">Auto-detects code</span>
+                    <span className="text-xs sm:text-sm font-bold block">Scan Barcode</span>
+                    <span className="text-[10px] text-slate-400 block sm:mt-0.5">Use shutter camera</span>
                   </div>
                 </button>
 
-                {/* 2. Label Photo Trigger */}
                 <button
                   type="button"
                   onClick={() => openCamera('label')}
@@ -285,7 +280,6 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
                   </div>
                 </button>
 
-                {/* 3. File Upload */}
                 <div
                   onDragEnter={handleDrag}
                   onDragLeave={handleDrag}
@@ -311,7 +305,7 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
             )}
           </div>
 
-          {/* Action Trigger Button for Mobile View */}
+          {/* Mobile Action Button */}
           <div className="block lg:hidden">
             <button
               disabled={isLoading || (!ingredientInput.trim() && !selectedImage && !barcodeInput.trim())}
@@ -334,7 +328,7 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
           </div>
         </div>
 
-        {/* Right Column: Active Sensitivity Flags Sidebar */}
+        {/* Right Sidebar: Active Sensitivity Flags */}
         <div className="lg:col-span-4 space-y-5 sm:space-y-6">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3.5">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
@@ -348,7 +342,6 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
             </div>
 
             <div className="space-y-2 text-xs text-slate-300">
-              {/* Only render active preset flags */}
               {userPreferences.asthmaSulfiteAlert && (
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-500/40">
                   <span className="truncate mr-2 font-medium">Asthma / Sulfites Warning</span>
@@ -377,7 +370,6 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
                 </div>
               )}
 
-              {/* Render custom sensitivities added by user */}
               {userPreferences.customSensitivities && userPreferences.customSensitivities.length > 0 && (
                 userPreferences.customSensitivities.map((item: string, idx: number) => (
                   <div key={idx} className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-500/40">
@@ -387,7 +379,6 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
                 ))
               )}
 
-              {/* Clean Empty State when no flags are active */}
               {totalActiveFlagsCount === 0 && (
                 <div className="p-4 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 text-center text-xs text-slate-500">
                   No active health sensitivities selected. Click <span className="text-emerald-400 font-semibold">Filters</span> in navigation to add active flags.
@@ -418,7 +409,7 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
             </button>
           </div>
 
-          {/* Reassuring AI status loader message */}
+          {/* Loading status box */}
           {isLoading && (
             <div className="bg-slate-950/80 border border-emerald-500/30 rounded-xl p-3.5 text-center space-y-1.5 animate-pulse">
               <p className="text-xs font-semibold text-emerald-400">
