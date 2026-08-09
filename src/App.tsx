@@ -38,6 +38,7 @@ export default function App() {
   });
 
   // Scanner state
+  const [productNameInput, setProductNameInput] = useState<string>('');
   const [ingredientInput, setIngredientInput] = useState<string>('');
   const [barcodeInput, setBarcodeInput] = useState<string>('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -120,8 +121,8 @@ export default function App() {
   };
 
   const handleAnalyze = async () => {
-    if (!ingredientInput.trim() && !selectedImage && !barcodeInput.trim()) {
-      setErrorMsg('Please enter a barcode number, ingredient text, or upload a label image.');
+    if (!productNameInput.trim() && !ingredientInput.trim() && !selectedImage && !barcodeInput.trim()) {
+      setErrorMsg('Please enter a product name, barcode number, ingredient text, or upload a label image.');
       return;
     }
 
@@ -135,6 +136,7 @@ export default function App() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          productName: productNameInput,
           ingredients: ingredientInput,
           barcodeInput: barcodeInput,
           image: selectedImage,
@@ -154,7 +156,7 @@ export default function App() {
       const data: NutriScanResult = await response.json();
       data.id = `scan-${Date.now()}`;
       data.timestamp = new Date().toISOString();
-      data.raw_ingredients_text = ingredientInput || barcodeInput;
+      data.raw_ingredients_text = ingredientInput || productNameInput || barcodeInput;
       if (selectedImage) {
         data.image_preview = selectedImage;
       }
@@ -178,6 +180,7 @@ export default function App() {
 
   const handleResetScan = () => {
     setAnalysisResult(null);
+    setProductNameInput('');
     setIngredientInput('');
     setBarcodeInput('');
     setSelectedImage(null);
@@ -334,6 +337,8 @@ export default function App() {
             />
           ) : (
             <ScannerTab
+              productNameInput={productNameInput}
+              setProductNameInput={setProductNameInput}
               ingredientInput={ingredientInput}
               setIngredientInput={setIngredientInput}
               barcodeInput={barcodeInput}
