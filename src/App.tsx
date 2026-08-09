@@ -402,8 +402,12 @@ export default function App() {
       <CameraModal
         isOpen={isCameraOpen}
         onClose={() => setIsCameraOpen(false)}
-        onCapture={(img) => {
-          setSelectedImage(img);
+        onCapture={(capturedData, mode) => {
+          if (mode === 'barcode') {
+            setBarcodeInput(capturedData); // Fills input box with scanned barcode digits
+          } else {
+            setSelectedImage(capturedData); // Attaches photo if label snapshot was taken
+          }
           setIsCameraOpen(false);
         }}
       />
