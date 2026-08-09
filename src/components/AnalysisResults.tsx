@@ -6,13 +6,13 @@ import {
   Info, 
   Download, 
   BookmarkPlus, 
-  Sparkles, 
   ExternalLink,
   RotateCcw,
   BookOpen,
   Barcode,
   Scale,
-  Database
+  Database,
+  ClipboardList
 } from 'lucide-react';
 import { NutriScanResult, AdditiveItem } from '../types';
 
@@ -22,6 +22,7 @@ interface AnalysisResultsProps {
   onSelectAdditive: (additive: AdditiveItem) => void;
   onSaveScan: (result: NutriScanResult) => void;
   isSaved: boolean;
+  onOpenEthicalModal?: () => void;
 }
 
 export const AnalysisResults: React.FC<AnalysisResultsProps> = ({
@@ -30,6 +31,7 @@ export const AnalysisResults: React.FC<AnalysisResultsProps> = ({
   onSelectAdditive,
   onSaveScan,
   isSaved,
+  onOpenEthicalModal,
 }) => {
   const { scan_data, product_info, product_name: legacyProductName, additives_detected = [], overall_analysis } = result;
 
@@ -87,6 +89,28 @@ export const AnalysisResults: React.FC<AnalysisResultsProps> = ({
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto animate-fade-in">
+      
+      {/* Framework Banner Bar */}
+      <div className="bg-slate-900/90 border border-slate-800/80 rounded-xl px-4 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs shadow-md">
+        <div className="flex items-center gap-2 text-slate-300">
+          <span className="font-extrabold text-[10px] uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+            Scientific Framework
+          </span>
+          <span className="font-medium text-slate-400 hidden sm:inline">
+            Personalised Food Suitability & Allergen Screening Standard
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={onOpenEthicalModal}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg transition-all hover:border-emerald-500/60 active:scale-95 cursor-pointer flex-shrink-0"
+        >
+          <ClipboardList className="w-3.5 h-3.5 text-emerald-400" />
+          <span>View Ethical & Safety Framework</span>
+        </button>
+      </div>
+
       {/* Product & Executive Summary Card */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-800">
