@@ -240,7 +240,7 @@ Produce ONLY a valid JSON object matching this exact schema:
     contentsParts.push({ text: promptText });
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.6-flash',
       contents: { parts: contentsParts },
       config: {
         responseMimeType: 'application/json',
@@ -371,7 +371,7 @@ ${offData ? `Crucial: In "scan_data", set "barcode_detected": true, "barcode_num
     }
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.6-flash',
       contents: { parts: contentsParts },
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
