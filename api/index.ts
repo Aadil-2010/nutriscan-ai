@@ -47,12 +47,13 @@ OPERATIONAL BEHAVIOR & OCR RULES:
    - When an image contains a barcode (UPC, EAN-13, EAN-8, QR code): Identify and extract the numerical digit sequence.
 2. Label OCR & Text Processing:
    - Perform line-by-line OCR on label images to extract ingredients, additives (INS/E-numbers), and allergen statements.
-3. Direct Product Name & GTIN Accuracy:
-   - When given a barcode GTIN (especially starting with 890 for India), cross-check the barcode digit sequence against real Indian commercial products (e.g. Lay's Spanish Tomato Tango, Kurkure, Thums Up, Amul) to guarantee 100% exact product identification.
-   - If explicit ingredient text is missing, deduce the exact standard commercial recipe for that product name/GTIN from your database.
+3. Mandatory Product Name Override & GTIN Accuracy:
+   - When a user provides a specific Product Name (e.g., "Horlicks", "Lay's Spanish Tomato Tango", "Thums Up"), you MUST evaluate that exact product and its commercial recipe.
+   - Ignore any conflicting OpenFoodFacts database entries or manufacturer prefix overlaps (e.g., shared HUL/PepsiCo prefixes like 8901030).
+   - If explicit ingredient text is missing, deduce the exact standard commercial recipe for that specified product name from your knowledge base.
 4. Biological & Functional Mapping:
    - Map additives to functional classes (Preservative, Antioxidant, Emulsifier, Synthetic Dye).
-   - Differentiate IgE-mediated allergies from non-IgE chemical sensitivities (e.g., sulfites triggering airway constriction in astmatics).
+   - Differentiate IgE-mediated allergies from non-IgE chemical sensitivities (e.g., sulfites triggering airway constriction in asthmatics).
 
 OUTPUT SCHEMA (JSON ONLY):
 You MUST reply with valid JSON matching the exact structure below:
@@ -127,7 +128,6 @@ async function fetchOpenFoodFactsProduct(barcode: string) {
           const productName = p.product_name_en || p.product_name || p.brands || '';
           const ingredientsText = p.ingredients_text_en || p.ingredients_text || p.ingredients_text_with_allergens || '';
 
-          // Only return OpenFoodFacts data if it has real, non-empty product content
           if (productName.trim() || ingredientsText.trim()) {
             return {
               barcode: cleanBarcode,
@@ -325,48 +325,45 @@ CRITICAL INSTRUCTION: If any ingredient/additive in this food product conflicts 
       });
 
       let promptText = `Examine this image for barcodes (UPC, EAN-13, EAN-8, QR codes) and food label ingredient text.`;
-      if (productName) promptText += ` Target Product Name: "${productName}".`;
+      if (productName?.trim()) promptText += ` MANDATORY OVERRIDE: Target Product Name is "${productName.trim()}". Do NOT misidentify this product as another brand.`;
       if (offData) {
-        promptText += `\nOPENFOODFACTS VERIFIED PRODUCT MATCH FOUND:
+        promptText += `\nOPENFOODFACTS REFERENCE DATA:
 Barcode GTIN: ${offData.barcode}
-Product Name: ${offData.productName}
-Brand: ${offData.brands || 'N/A'}
-Categories: ${offData.categories || 'N/A'}
-Verified Ingredients from OpenFoodFacts: "${offData.ingredientsText || 'N/A'}"
-Known Additive Tags from OpenFoodFacts: ${JSON.stringify(offData.additivesTags)}`;
+Database Title: ${offData.productName}
+Ingredients: "${offData.ingredientsText || 'N/A'}"`;
       } else if (effectiveBarcode) {
         promptText += ` User specified barcode number GTIN: ${effectiveBarcode}.`;
       }
       if (ingredients) promptText += ` Additional user provided text: "${ingredients}".`;
       promptText += `\nUser health sensitivities context: ${JSON.stringify(userPreferences || {})}.${healthContextStr}
-Perform OCR, barcode identification, additive classification, and produce the required JSON analysis matching the schema.
-${offData ? `Crucial: In "scan_data", set "barcode_detected": true, "barcode_number": "${offData.barcode}", "detected_product_name": "${offData.productName}", "openfoodfacts_matched": true, "brand_name": "${offData.brands}".` : ''}`;
+Perform OCR, barcode identification, additive classification, and produce the required JSON analysis matching the schema.`;
 
       contentsParts.push({ text: promptText });
     } else {
       let promptText = `Analyze the food product input according to NutriScan AI knowledge base.`;
+      
       if (productName?.trim()) {
-        promptText += `\nTARGET PRODUCT NAME: "${productName.trim()}". Prioritize evaluating this exact product's known commercial ingredients, additives, and allergens.`;
+        promptText += `\nCRITICAL PRODUCT OVERRIDE: User specified Product Name is "${productName.trim()}". You MUST evaluate this item strictly as "${productName.trim()}" and ignore any conflicting OpenFoodFacts database entries or manufacturer prefix overlaps.`;
       }
+      
       if (offData) {
-        promptText += `\nOPENFOODFACTS DATABASE VERIFIED MATCH:
+        promptText += `\nOPENFOODFACTS DATABASE REFERENCE:
 Barcode GTIN: ${offData.barcode}
-Product Name: ${offData.productName}
+Database Name: ${offData.productName}
 Brand: ${offData.brands || 'N/A'}
-Categories: ${offData.categories || 'N/A'}
-Ingredients Text from OpenFoodFacts: "${offData.ingredientsText || 'N/A'}"
-Additives Tags from OpenFoodFacts: ${JSON.stringify(offData.additivesTags)}
+Ingredients Text: "${offData.ingredientsText || 'N/A'}"
 `;
       } else if (effectiveBarcode) {
         promptText += `\nBARCODE GTIN: ${effectiveBarcode}.
-Note: OpenFoodFacts did not have a verified record for GTIN ${effectiveBarcode}. Use your global/Indian consumer food database knowledge (GTIN prefix 890 indicates Indian market products like Lay's Spanish Tomato Tango, Kurkure, Amul, Parle) to identify the exact product associated with this barcode and evaluate its ingredients and additives.`;
+Evaluate the exact target product "${productName?.trim() || 'Food Product'}" associated with this GTIN sequence.`;
       }
+
       if (ingredients && ingredients !== effectiveBarcode) {
         promptText += `\nEXPLICIT INGREDIENTS PROVIDED: "${ingredients}".`;
       }
+      
       promptText += `\nUser health sensitivities context: ${JSON.stringify(userPreferences || {})}.${healthContextStr}
-Extract every single food additive, map its INS/E-number, functional class, biological mechanism (IgE vs Non-IgE), regulatory status (FSSAI/FDA/EFSA), safety rating, and produce the structured JSON output.
-${offData ? `Crucial: In "scan_data", set "barcode_detected": true, "barcode_number": "${offData.barcode}", "detected_product_name": "${offData.productName}", "openfoodfacts_matched": true, "brand_name": "${offData.brands}".` : ''}`;
+Extract every single food additive, map its INS/E-number, functional class, biological mechanism (IgE vs Non-IgE), regulatory status (FSSAI/FDA/EFSA), safety rating, and produce the structured JSON output.`;
 
       contentsParts.push({ text: promptText });
     }
@@ -409,8 +406,11 @@ ${offData ? `Crucial: In "scan_data", set "barcode_detected": true, "barcode_num
       if (offData.imageUrl) {
         parsedData.off_image_url = offData.imageUrl;
       }
-    } else if (productName && parsedData.scan_data && (!parsedData.scan_data.detected_product_name || parsedData.scan_data.detected_product_name === 'Unknown Product')) {
-      parsedData.scan_data.detected_product_name = productName;
+    }
+
+    // Force exact user-entered product name if specified
+    if (productName?.trim() && parsedData.scan_data) {
+      parsedData.scan_data.detected_product_name = productName.trim();
     }
 
     return res.json(parsedData);
