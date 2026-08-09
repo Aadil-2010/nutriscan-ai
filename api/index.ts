@@ -169,7 +169,7 @@ Extract diagnoses and additives to avoid. Reply in JSON matching expected schema
     contentsParts.push({ text: promptText });
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
+      model: 'gemini-1.5-flash',
       contents: { parts: contentsParts },
       config: { responseMimeType: 'application/json', temperature: 0.1 },
     });
@@ -238,7 +238,7 @@ Ingredients: "${offData.ingredientsText || 'N/A'}"`;
     contentsParts.push({ text: promptText });
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
+      model: 'gemini-1.5-flash',
       contents: { parts: contentsParts },
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
