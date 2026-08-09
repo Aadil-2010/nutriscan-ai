@@ -47,7 +47,9 @@ OPERATIONAL BEHAVIOR & OCR RULES:
    - When an image contains a barcode (UPC, EAN-13, EAN-8, QR code): Identify and extract the numerical digit sequence.
 2. Label OCR & Text Processing:
    - Perform line-by-line OCR on label images to extract ingredients, additives (INS/E-numbers), and allergen statements.
-3. Biological & Functional Mapping:
+3. Direct Product Name Search:
+   - When only a product name (e.g., "Lays Classic", "Coca-Cola Original", "Doritos") is provided without an explicit ingredient list, identify the commercial food product from knowledge base, deduce its standard ingredient composition, and evaluate all additives/allergens accordingly.
+4. Biological & Functional Mapping:
    - Map additives to functional classes (Preservative, Antioxidant, Emulsifier, Synthetic Dye).
    - Differentiate IgE-mediated allergies from non-IgE chemical sensitivities (e.g., sulfites triggering airway constriction in asthmatics).
 
@@ -238,7 +240,7 @@ Produce ONLY a valid JSON object matching this exact schema:
     contentsParts.push({ text: promptText });
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
+      model: 'gemini-2.5-flash',
       contents: { parts: contentsParts },
       config: {
         responseMimeType: 'application/json',
@@ -269,10 +271,10 @@ Produce ONLY a valid JSON object matching this exact schema:
 // Analyze route
 app.post('/api/analyze', async (req, res) => {
   try {
-    const { ingredients, image, barcodeInput, userPreferences, healthProfile } = req.body;
+    const { productName, ingredients, image, barcodeInput, userPreferences, healthProfile } = req.body;
 
-    if (!ingredients && !image && !barcodeInput) {
-      return res.status(400).json({ error: 'Please provide either an ingredient text, a barcode number, or a label/barcode image.' });
+    if (!productName?.trim() && !ingredients?.trim() && !image && !barcodeInput?.trim()) {
+      return res.status(400).json({ error: 'Please provide a product name, ingredient text, barcode number, or label image.' });
     }
 
     let effectiveBarcode = barcodeInput ? barcodeInput.trim() : '';
@@ -323,6 +325,7 @@ CRITICAL INSTRUCTION: If any ingredient/additive in this food product conflicts 
       });
 
       let promptText = `Examine this image for barcodes (UPC, EAN-13, EAN-8, QR codes) and food label ingredient text.`;
+      if (productName) promptText += ` Target Product Name: "${productName}".`;
       if (offData) {
         promptText += `\nOPENFOODFACTS VERIFIED PRODUCT MATCH FOUND:
 Barcode GTIN: ${offData.barcode}
@@ -342,6 +345,9 @@ ${offData ? `Crucial: In "scan_data", set "barcode_detected": true, "barcode_num
       contentsParts.push({ text: promptText });
     } else {
       let promptText = `Analyze the food product input according to NutriScan AI knowledge base.`;
+      if (productName?.trim()) {
+        promptText += `\nTarget Food Product Name: "${productName.trim()}". (If explicit ingredient text is missing, evaluate this product based on its standard known commercial ingredients and food additives).`;
+      }
       if (offData) {
         promptText += `\nOPENFOODFACTS DATABASE VERIFIED MATCH:
 Barcode GTIN: ${offData.barcode}
@@ -365,7 +371,7 @@ ${offData ? `Crucial: In "scan_data", set "barcode_detected": true, "barcode_num
     }
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
+      model: 'gemini-2.5-flash',
       contents: { parts: contentsParts },
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
@@ -402,6 +408,8 @@ ${offData ? `Crucial: In "scan_data", set "barcode_detected": true, "barcode_num
       if (offData.imageUrl) {
         parsedData.off_image_url = offData.imageUrl;
       }
+    } else if (productName && parsedData.scan_data && (!parsedData.scan_data.detected_product_name || parsedData.scan_data.detected_product_name === 'Unknown Product')) {
+      parsedData.scan_data.detected_product_name = productName;
     }
 
     return res.json(parsedData);
