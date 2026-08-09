@@ -1,18 +1,36 @@
 import React from 'react';
-import { BookOpen, ShieldCheck, AlertTriangle, Scale, Activity, Dna, FileCheck2, Info } from 'lucide-react';
+import { BookOpen, ShieldCheck, AlertTriangle, Scale, Activity, Dna, FileCheck2, Info, ClipboardList } from 'lucide-react';
 
-export const GuideTab: React.FC = () => {
+interface GuideTabProps {
+  onOpenEthicalModal?: () => void;
+}
+
+export const GuideTab: React.FC<GuideTabProps> = ({ onOpenEthicalModal }) => {
   return (
     <div className="space-y-8 max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-xl">
-        <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight flex items-center">
-          <BookOpen className="w-7 h-7 mr-3 text-emerald-400" />
-          NutriScan AI Core Knowledge Base
-        </h1>
-        <p className="text-sm text-slate-300 mt-2 leading-relaxed">
-          Comprehensive guide to food additive functional classes, biological allergy and sensitivity mechanisms, toxicological ADI standards, and global regulatory frameworks.
-        </p>
+      {/* Header with Framework Trigger Button */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight flex items-center">
+              <BookOpen className="w-7 h-7 mr-3 text-emerald-400 flex-shrink-0" />
+              NutriScan AI Core Knowledge Base
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-300 mt-2 leading-relaxed max-w-2xl">
+              Comprehensive guide to food additive functional classes, biological allergy and sensitivity mechanisms, toxicological ADI standards, and global regulatory frameworks.
+            </p>
+          </div>
+
+          {/* Styled Ethical & Safety Framework Button */}
+          <button
+            type="button"
+            onClick={onOpenEthicalModal}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-xl shadow-md transition-all hover:border-emerald-500/60 active:scale-95 cursor-pointer whitespace-nowrap self-start md:self-center flex-shrink-0"
+          >
+            <ClipboardList className="w-4 h-4 text-emerald-400" />
+            <span>View Ethical & Safety Framework</span>
+          </button>
+        </div>
       </div>
 
       {/* 1. Functional Classes */}
@@ -65,7 +83,7 @@ export const GuideTab: React.FC = () => {
               <span>IgE-Mediated Immune Allergy</span>
             </div>
             <p className="leading-relaxed">
-              True adaptive immune response where body mistake proteins for hostile invaders, generating IgE antibodies. Secondary exposure triggers mast cell degranulation releasing histamine (hives, airway constriction, anaphylaxis).
+              True adaptive immune response where body mistakes proteins for hostile invaders, generating IgE antibodies. Secondary exposure triggers mast cell degranulation releasing histamine (hives, airway constriction, anaphylaxis).
             </p>
           </div>
 
