@@ -236,19 +236,22 @@ export default function App() {
       />
 
       {/* Exhibition Board Disclaimer Banner Toggle */}
-      <div className="bg-slate-900/90 border-b border-slate-800 py-2 px-4 text-xs">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
+      <div className="bg-slate-900/90 border-b border-slate-800 py-2.5 px-4 text-xs">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center space-x-2 text-slate-300">
             <span className="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[10px]">
               Scientific Framework
             </span>
             <span>Personalised Food Suitability & Allergen Screening Standard</span>
           </div>
+          
           <button 
+            type="button"
             onClick={() => setShowEthicalBoard(!showEthicalBoard)}
-            className="text-emerald-400 hover:text-emerald-300 font-medium underline cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg shadow-sm transition-all hover:border-emerald-500/60 active:scale-95 cursor-pointer flex-shrink-0"
           >
-            {showEthicalBoard ? 'Hide Exhibition Board Rules' : '📋 View Ethical & Safety Framework'}
+            <span>📋</span>
+            <span>{showEthicalBoard ? 'Hide Exhibition Board Rules' : 'View Ethical & Safety Framework'}</span>
           </button>
         </div>
       </div>
