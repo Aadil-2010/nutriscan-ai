@@ -30,7 +30,7 @@ interface ScannerTabProps {
 }
 
 export const ScannerTab: React.FC<ScannerTabProps> = ({
-  productNameInput = '',
+  productNameInput,
   setProductNameInput,
   ingredientInput,
   setIngredientInput,
@@ -43,6 +43,18 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
   onAnalyze,
   isLoading,
 }) => {
+  // Local state so the input works independently
+  const [localProductName, setLocalProductName] = useState('');
+  
+  const currentName = productNameInput !== undefined ? productNameInput : localProductName;
+
+  const handleNameChange = (val: string) => {
+    setLocalProductName(val);
+    if (setProductNameInput) {
+      setProductNameInput(val);
+    }
+  };
+
   const [dragActive, setDragActive] = useState(false);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -85,6 +97,7 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
   };
 
   const handleClear = () => {
+    setLocalProductName('');
     if (setProductNameInput) setProductNameInput('');
     setIngredientInput('');
     setBarcodeInput('');
@@ -100,9 +113,7 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
 
   const handleSelectQuickBarcode = (item: { label: string; code: string; name: string }) => {
     setBarcodeInput(item.code);
-    if (setProductNameInput) {
-      setProductNameInput(item.name);
-    }
+    handleNameChange(item.name);
   };
 
   const activePresetCount = Object.entries(userPreferences).filter(([key, val]) => {
@@ -144,8 +155,8 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
             <input
               id="product-name-input"
               type="text"
-              value={productNameInput}
-              onChange={(e) => setProductNameInput && setProductNameInput(e.target.value)}
+              value={currentName}
+              onChange={(e) => handleNameChange(e.target.value)}
               placeholder="e.g. Coca-Cola Original, Doritos Nacho Cheese, Custom Energy Bar..."
               className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/60 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 outline-none transition-all"
             />
@@ -218,7 +229,7 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
                 <FileText className="w-4 h-4 mr-2 text-emerald-400 flex-shrink-0" />
                 Paste or Type Ingredients List
               </label>
-              {(ingredientInput || selectedImage || barcodeInput || productNameInput) && (
+              {(ingredientInput || selectedImage || barcodeInput || currentName) && (
                 <button
                   onClick={handleClear}
                   className="text-xs text-slate-400 hover:text-rose-400 flex items-center transition-colors min-h-[32px] px-1"
