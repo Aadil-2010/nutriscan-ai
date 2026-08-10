@@ -58,7 +58,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-          {/* Action Buttons */}
+          {/* Right Action Buttons */}
           <div className="flex items-center space-x-2 flex-shrink-0">
             <button
               onClick={openPreferencesModal}
@@ -82,7 +82,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* ALWAYS-VISIBLE NAVIGATION BAR (Works on Mobile + Desktop) */}
+        {/* ALWAYS-VISIBLE HORIZONTAL TABS ROW */}
         <nav className="flex items-center space-x-2 overflow-x-auto pb-3 pt-1 border-t border-slate-800/80 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           <button
             onClick={() => setActiveTab('scanner')}
