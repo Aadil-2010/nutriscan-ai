@@ -311,7 +311,7 @@ export default function App() {
       )}
 
       {/* Main Content Workspace Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 pb-24 md:pb-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 pb-28">
         {/* Top Priority Allergen Alert Banner */}
         {analysisResult?.allergen_alert?.detected && (
           <div className="mb-6 bg-red-950/90 border-2 border-red-500 text-red-100 p-5 rounded-2xl shadow-2xl animate-pulse">
