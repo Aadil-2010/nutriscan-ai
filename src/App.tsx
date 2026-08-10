@@ -48,7 +48,7 @@ export default function App() {
   // Analysis result state
   const [analysisResult, setAnalysisResult] = useState<NutriScanResult | null>(null);
 
-  // Modals state (Camera mode state added)
+  // Modals state
   const [isCameraOpen, setIsCameraOpen] = useState<boolean>(false);
   const [cameraMode, setCameraMode] = useState<'label' | 'barcode'>('barcode');
   const [selectedAdditiveModal, setSelectedAdditiveModal] = useState<AdditiveItem | null>(null);
@@ -171,7 +171,7 @@ export default function App() {
     } catch (err: any) {
       console.error('Analysis error:', err);
       setErrorMsg(err.message || 'Failed to complete NutriScan AI analysis. Please check network connection or try again.');
-    } fontally {
+    } finally {
       setIsLoading(false);
     }
   };
