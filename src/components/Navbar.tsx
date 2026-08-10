@@ -41,8 +41,8 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <>
-      {/* Top Header Navbar */}
-      <header className="sticky top-0 z-40 border-b border-slate-800 bg-slate-950/95 backdrop-blur-md">
+      {/* TOP HEADER (DESKTOP & MOBILE LOGO BAR) */}
+      <header className="sticky top-0 z-40 border-b border-slate-800 bg-slate-950/90 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             
@@ -64,15 +64,89 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="text-lg font-extrabold text-white tracking-tight flex items-center gap-1.5">
                   FoodWise <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">AI</span>
                 </span>
-                <span className="text-[10px] text-slate-400 block -mt-1 font-medium">Food Additive & Allergen Engine</span>
+                <span className="text-[10px] text-slate-400 block -mt-1 font-medium hidden sm:block">Food Additive & Allergen Engine</span>
               </div>
             </div>
 
-            {/* Top Right Controls (Filters + Logout) */}
-            <div className="flex items-center space-x-2 flex-shrink-0">
+            {/* COMPUTER / DESKTOP NAVIGATION (VISIBLE ONLY ON MD BREAKPOINT & UP) */}
+            <nav className="hidden md:flex items-center space-x-1">
+              <button
+                onClick={() => setActiveTab('scanner')}
+                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                  activeTab === 'scanner'
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-900'
+                }`}
+              >
+                Scanner
+              </button>
+
+              <button
+                onClick={() => setActiveTab('health-profile')}
+                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeTab === 'health-profile'
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-900'
+                }`}
+              >
+                <User className="w-3.5 h-3.5" />
+                <span>Health Profile</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('directory')}
+                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeTab === 'directory'
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-900'
+                }`}
+              >
+                <Database className="w-3.5 h-3.5" />
+                <span>Additives DB</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('calculator')}
+                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeTab === 'calculator'
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-900'
+                }`}
+              >
+                <Calculator className="w-3.5 h-3.5" />
+                <span>ADI Calculator</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('guide')}
+                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeTab === 'guide'
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-900'
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>Safety Guide</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('history')}
+                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeTab === 'history'
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-900'
+                }`}
+              >
+                <History className="w-3.5 h-3.5" />
+                <span>Saved Scans ({savedCount})</span>
+              </button>
+            </nav>
+
+            {/* ACTION BUTTONS (FILTERS & LOGOUT) */}
+            <div className="flex items-center space-x-3 flex-shrink-0">
               <button
                 onClick={openPreferencesModal}
-                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-slate-200 transition-all"
+                className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-slate-200 transition-all"
               >
                 <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Filters</span>
@@ -88,7 +162,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 className="text-xs text-slate-400 hover:text-rose-400 font-semibold px-2 py-1 transition-colors flex items-center gap-1"
               >
                 <LogOut className="w-3.5 h-3.5" />
-                <span>Logout</span>
+                <span className="hidden sm:inline">Logout</span>
               </button>
             </div>
 
@@ -96,12 +170,9 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </header>
 
-      {/* FIXED BOTTOM NAVIGATION BAR - FORCED VISIBLE ON MOBILE & SMALL SCREENS */}
-      <div 
-        style={{ display: 'block !important', visibility: 'visible !important' }} 
-        className="fixed bottom-0 left-0 right-0 z-50 bg-slate-950 border-t border-slate-800 px-2 py-2 shadow-2xl"
-      >
-        <div className="flex items-center justify-around max-w-lg mx-auto overflow-x-auto">
+      {/* MOBILE BOTTOM NAVIGATION BAR (VISIBLE ONLY ON MOBILE & TABLETS) */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-slate-950/95 border-t border-slate-800 backdrop-blur-lg px-2 py-2 shadow-2xl">
+        <div className="flex items-center justify-between max-w-md mx-auto overflow-x-auto no-scrollbar">
           {navTabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -110,7 +181,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all flex-shrink-0 ${
+                className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all flex-shrink-0 ${
                   isActive
                     ? 'text-emerald-400 font-bold scale-105'
                     : 'text-slate-400 hover:text-slate-200'
@@ -122,7 +193,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             );
           })}
         </div>
-      </div>
+      </nav>
     </>
   );
 };
