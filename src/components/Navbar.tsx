@@ -162,14 +162,14 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             </nav>
 
-            {/* Desktop & Mobile Action Controls */}
+            {/* Action Bar */}
             <div className="flex items-center space-x-3">
               <button
                 onClick={openPreferencesModal}
                 className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-slate-200 transition-all"
               >
                 <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="hidden sm:inline">Filters</span>
+                <span>Filters</span>
                 {activePreferenceCount > 0 && (
                   <span className="ml-1 bg-emerald-500 text-slate-950 px-1.5 py-0.2 rounded-full text-[10px] font-extrabold">
                     {activePreferenceCount}
@@ -189,7 +189,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </header>
 
-      {/* Slide-out Drawer for Mobile screens */}
+      {/* Mobile Slide-out Navigation Drawer */}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-50 md:hidden flex">
           <div 
@@ -200,7 +200,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="relative w-4/5 max-w-xs bg-slate-900 border-r border-slate-800 h-full p-5 flex flex-col justify-between shadow-2xl z-10">
             <div className="space-y-6">
               <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-                <span className="font-bold text-white text-base">Menu</span>
+                <span className="font-bold text-white text-base">Navigation</span>
                 <button
                   type="button"
                   onClick={() => setIsMobileMenuOpen(false)}
@@ -210,7 +210,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
               </div>
 
-              <div className="space-y-1.5">
+              {/* Exact item list matching screenshot */}
+              <div className="space-y-2">
                 {navItems.map((item) => {
                   const Icon = item.icon;
                   const isActive = activeTab === item.id;
@@ -218,7 +219,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <button
                       key={item.id}
                       onClick={() => handleMobileTabClick(item.id)}
-                      className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${
+                      className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
                         isActive
                           ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
                           : 'text-slate-300 hover:text-white hover:bg-slate-800'
