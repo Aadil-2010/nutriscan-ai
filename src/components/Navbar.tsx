@@ -24,12 +24,14 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="sticky top-0 z-40 border-b border-slate-800 bg-slate-950/90 backdrop-blur-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        {/* Top Header Row (Logo + Desktop Nav + Actions) */}
         <div className="flex items-center justify-between h-16">
           
           {/* Brand Logo */}
           <div
             onClick={() => setActiveTab('scanner')}
-            className="flex items-center space-x-3 cursor-pointer group"
+            className="flex items-center space-x-3 cursor-pointer group flex-shrink-0"
           >
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-400 via-teal-400 to-emerald-500 p-2 flex items-center justify-center shadow-lg shadow-emerald-500/20 group-hover:scale-105 transition-transform">
               <svg className="w-5 h-5 text-slate-950" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -44,11 +46,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="text-lg font-extrabold text-white tracking-tight flex items-center gap-1.5">
                 FoodWise <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">AI</span>
               </span>
-              <span className="text-[10px] text-slate-400 block -mt-1 font-medium">Food Additive & Allergen Engine</span>
+              <span className="text-[10px] text-slate-400 block -mt-1 font-medium hidden sm:block">Food Additive & Allergen Engine</span>
             </div>
           </div>
 
-          {/* Navigation Links */}
+          {/* Desktop Navigation Links (Visible on screens >= 768px) */}
           <nav className="hidden md:flex items-center space-x-1">
             <button
               onClick={() => setActiveTab('scanner')}
@@ -146,6 +148,81 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
         </div>
+
+        {/* Mobile Navigation Bar Row (Visible ONLY on mobile screens < 768px) */}
+        <nav className="flex md:hidden items-center space-x-1 overflow-x-auto pb-3 pt-1 border-t border-slate-800/80 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          <button
+            onClick={() => setActiveTab('scanner')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex-shrink-0 ${
+              activeTab === 'scanner'
+                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                : 'text-slate-300 hover:text-white hover:bg-slate-900'
+            }`}
+          >
+            Scanner
+          </button>
+
+          <button
+            onClick={() => setActiveTab('health-profile')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 ${
+              activeTab === 'health-profile'
+                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                : 'text-slate-300 hover:text-white hover:bg-slate-900'
+            }`}
+          >
+            <User className="w-3.5 h-3.5" />
+            <span>Health Profile</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('directory')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 ${
+              activeTab === 'directory'
+                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                : 'text-slate-300 hover:text-white hover:bg-slate-900'
+            }`}
+          >
+            <Database className="w-3.5 h-3.5" />
+            <span>Additives DB</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('calculator')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 ${
+              activeTab === 'calculator'
+                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                : 'text-slate-300 hover:text-white hover:bg-slate-900'
+            }`}
+          >
+            <Calculator className="w-3.5 h-3.5" />
+            <span>ADI Calculator</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('guide')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 ${
+              activeTab === 'guide'
+                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                : 'text-slate-300 hover:text-white hover:bg-slate-900'
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span>Safety Guide</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('history')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 ${
+              activeTab === 'history'
+                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                : 'text-slate-300 hover:text-white hover:bg-slate-900'
+            }`}
+          >
+            <History className="w-3.5 h-3.5" />
+            <span>Saved Scans ({savedCount})</span>
+          </button>
+        </nav>
+
       </div>
     </header>
   );
