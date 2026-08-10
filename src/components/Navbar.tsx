@@ -168,7 +168,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </header>
 
-      {/* Dark Theme Mobile Bottom Bar (Pill Box Style from Image) */}
+      {/* Dark Theme Mobile Bottom Navigation Bar (Pill Box Style) */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-slate-950/95 border-t border-slate-800 rounded-t-3xl px-3 py-2.5 backdrop-blur-xl shadow-[0_-4px_25px_rgba(0,0,0,0.5)]">
         <div className="flex items-center justify-around max-w-md mx-auto">
           {bottomTabs.map((tab) => {
