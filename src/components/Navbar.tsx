@@ -1,14 +1,6 @@
 import React from 'react';
-import { 
-  SlidersHorizontal, 
-  User, 
-  History, 
-  BookOpen, 
-  Calculator, 
-  Database,
-  Scan,
-  LogOut
-} from 'lucide-react';
+import { SlidersHorizontal, User, History, BookOpen, Calculator, Database } from 'lucide-react';
+import { MobileNav } from './MobileNav';
 import { UserProfile } from '../types';
 
 interface NavbarProps {
@@ -30,26 +22,23 @@ export const Navbar: React.FC<NavbarProps> = ({
   userProfile,
   onLogout,
 }) => {
-  const navTabs = [
-    { id: 'scanner', label: 'Scanner', icon: Scan },
-    { id: 'health-profile', label: 'Health Profile', icon: User },
-    { id: 'directory', label: 'Additives DB', icon: Database },
-    { id: 'calculator', label: 'ADI Calc', icon: Calculator },
-    { id: 'guide', label: 'Safety Guide', icon: BookOpen },
-    { id: 'history', label: `Saved (${savedCount})`, icon: History },
-  ];
-
   return (
-    <>
-      {/* TOP HEADER (DESKTOP & MOBILE LOGO BAR) */}
-      <header className="sticky top-0 z-40 border-b border-slate-800 bg-slate-950/90 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            
-            {/* Brand Logo */}
+    <header className="sticky top-0 z-40 border-b border-slate-800 bg-slate-950/90 backdrop-blur-md">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16">
+          
+          {/* Mobile Button + Brand Logo */}
+          <div className="flex items-center space-x-3">
+            <MobileNav 
+              activeTab={activeTab} 
+              setActiveTab={setActiveTab} 
+              savedCount={savedCount} 
+              onLogout={onLogout} 
+            />
+
             <div
               onClick={() => setActiveTab('scanner')}
-              className="flex items-center space-x-3 cursor-pointer group flex-shrink-0"
+              className="flex items-center space-x-3 cursor-pointer group"
             >
               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-400 via-teal-400 to-emerald-500 p-2 flex items-center justify-center shadow-lg shadow-emerald-500/20 group-hover:scale-105 transition-transform">
                 <svg className="w-5 h-5 text-slate-950" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -67,133 +56,107 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="text-[10px] text-slate-400 block -mt-1 font-medium hidden sm:block">Food Additive & Allergen Engine</span>
               </div>
             </div>
-
-            {/* COMPUTER / DESKTOP NAVIGATION (VISIBLE ONLY ON MD BREAKPOINT & UP) */}
-            <nav className="hidden md:flex items-center space-x-1">
-              <button
-                onClick={() => setActiveTab('scanner')}
-                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                  activeTab === 'scanner'
-                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-900'
-                }`}
-              >
-                Scanner
-              </button>
-
-              <button
-                onClick={() => setActiveTab('health-profile')}
-                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  activeTab === 'health-profile'
-                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-900'
-                }`}
-              >
-                <User className="w-3.5 h-3.5" />
-                <span>Health Profile</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('directory')}
-                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  activeTab === 'directory'
-                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-900'
-                }`}
-              >
-                <Database className="w-3.5 h-3.5" />
-                <span>Additives DB</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('calculator')}
-                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  activeTab === 'calculator'
-                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-900'
-                }`}
-              >
-                <Calculator className="w-3.5 h-3.5" />
-                <span>ADI Calculator</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('guide')}
-                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  activeTab === 'guide'
-                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-900'
-                }`}
-              >
-                <BookOpen className="w-3.5 h-3.5" />
-                <span>Safety Guide</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('history')}
-                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  activeTab === 'history'
-                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-900'
-                }`}
-              >
-                <History className="w-3.5 h-3.5" />
-                <span>Saved Scans ({savedCount})</span>
-              </button>
-            </nav>
-
-            {/* ACTION BUTTONS (FILTERS & LOGOUT) */}
-            <div className="flex items-center space-x-3 flex-shrink-0">
-              <button
-                onClick={openPreferencesModal}
-                className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-slate-200 transition-all"
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Filters</span>
-                {activePreferenceCount > 0 && (
-                  <span className="ml-1 bg-emerald-500 text-slate-950 px-1.5 py-0.2 rounded-full text-[10px] font-extrabold">
-                    {activePreferenceCount}
-                  </span>
-                )}
-              </button>
-
-              <button
-                onClick={onLogout}
-                className="text-xs text-slate-400 hover:text-rose-400 font-semibold px-2 py-1 transition-colors flex items-center gap-1"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Logout</span>
-              </button>
-            </div>
-
           </div>
-        </div>
-      </header>
 
-      {/* MOBILE BOTTOM NAVIGATION BAR (VISIBLE ONLY ON MOBILE & TABLETS) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-slate-950/95 border-t border-slate-800 backdrop-blur-lg px-2 py-2 shadow-2xl">
-        <div className="flex items-center justify-between max-w-md mx-auto overflow-x-auto no-scrollbar">
-          {navTabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
+          {/* Desktop Navigation */}
+          <nav className="hidden md:flex items-center space-x-1">
+            <button
+              onClick={() => setActiveTab('scanner')}
+              className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'scanner'
+                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-900'
+              }`}
+            >
+              Scanner
+            </button>
 
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all flex-shrink-0 ${
-                  isActive
-                    ? 'text-emerald-400 font-bold scale-105'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Icon className={`w-5 h-5 mb-0.5 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
-                <span className="text-[10px] leading-tight whitespace-nowrap">{tab.label}</span>
-              </button>
-            );
-          })}
+            <button
+              onClick={() => setActiveTab('health-profile')}
+              className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'health-profile'
+                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-900'
+              }`}
+            >
+              <User className="w-3.5 h-3.5" />
+              <span>Health Profile</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('directory')}
+              className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'directory'
+                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-900'
+              }`}
+            >
+              <Database className="w-3.5 h-3.5" />
+              <span>Additives DB</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('calculator')}
+              className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'calculator'
+                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-900'
+              }`}
+            >
+              <Calculator className="w-3.5 h-3.5" />
+              <span>ADI Calculator</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('guide')}
+              className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'guide'
+                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-900'
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>Safety Guide</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('history')}
+              className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'history'
+                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-900'
+              }`}
+            >
+              <History className="w-3.5 h-3.5" />
+              <span>Saved Scans ({savedCount})</span>
+            </button>
+          </nav>
+
+          {/* Action Bar */}
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={openPreferencesModal}
+              className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-slate-200 transition-all"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Filters</span>
+              {activePreferenceCount > 0 && (
+                <span className="ml-1 bg-emerald-500 text-slate-950 px-1.5 py-0.2 rounded-full text-[10px] font-extrabold">
+                  {activePreferenceCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={onLogout}
+              className="text-xs text-slate-400 hover:text-rose-400 font-semibold px-2 py-1 transition-colors hidden md:block"
+            >
+              Logout
+            </button>
+          </div>
+
         </div>
-      </nav>
-    </>
+      </div>
+    </header>
   );
 };
