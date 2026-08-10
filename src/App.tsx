@@ -48,13 +48,14 @@ export default function App() {
   // Analysis result state
   const [analysisResult, setAnalysisResult] = useState<NutriScanResult | null>(null);
 
-  // Modals state
+  // Modals state (Camera mode state added)
   const [isCameraOpen, setIsCameraOpen] = useState<boolean>(false);
+  const [cameraMode, setCameraMode] = useState<'label' | 'barcode'>('barcode');
   const [selectedAdditiveModal, setSelectedAdditiveModal] = useState<AdditiveItem | null>(null);
   const [isPrefsOpen, setIsPrefsOpen] = useState<boolean>(false);
   const [showEthicalBoard, setShowEthicalBoard] = useState<boolean>(false);
 
-  // User health preferences state (DEFAULT SETTINGS: ALL CLEAR)
+  // User health preferences state
   const [userPreferences, setUserPreferences] = useState<UserPreferences>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_PREFS);
@@ -120,6 +121,11 @@ export default function App() {
     localStorage.removeItem(STORAGE_KEY_USER);
   };
 
+  const handleOpenCamera = (mode: 'label' | 'barcode') => {
+    setCameraMode(mode);
+    setIsCameraOpen(true);
+  };
+
   const handleAnalyze = async () => {
     if (!productNameInput.trim() && !ingredientInput.trim() && !selectedImage && !barcodeInput.trim()) {
       setErrorMsg('Please enter a product name, barcode number, ingredient text, or upload a label image.');
@@ -165,7 +171,7 @@ export default function App() {
     } catch (err: any) {
       console.error('Analysis error:', err);
       setErrorMsg(err.message || 'Failed to complete NutriScan AI analysis. Please check network connection or try again.');
-    } finally {
+    } fontally {
       setIsLoading(false);
     }
   };
@@ -238,7 +244,7 @@ export default function App() {
         onLogout={handleLogout}
       />
 
-      {/* Exhibition Board Disclaimer Banner Toggle */}
+      {/* Disclaimer Banner Toggle */}
       <div className="bg-slate-900/90 border-b border-slate-800 py-2.5 px-4 text-xs">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center space-x-2 text-slate-300">
@@ -346,7 +352,7 @@ export default function App() {
               selectedImage={selectedImage}
               setSelectedImage={setSelectedImage}
               userPreferences={userPreferences}
-              openCamera={() => setIsCameraOpen(true)}
+              openCamera={handleOpenCamera}
               onAnalyze={handleAnalyze}
               isLoading={isLoading}
               onSelectSample={handleSelectSample}
@@ -401,12 +407,13 @@ export default function App() {
       {/* Camera Capture Modal */}
       <CameraModal
         isOpen={isCameraOpen}
+        mode={cameraMode}
         onClose={() => setIsCameraOpen(false)}
         onCapture={(capturedData, mode) => {
           if (mode === 'barcode') {
-            setBarcodeInput(capturedData); // Fills input box with scanned barcode digits
+            setBarcodeInput(capturedData);
           } else {
-            setSelectedImage(capturedData); // Attaches photo if label snapshot was taken
+            setSelectedImage(capturedData);
           }
           setIsCameraOpen(false);
         }}
