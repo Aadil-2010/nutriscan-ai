@@ -43,7 +43,6 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
   onAnalyze,
   isLoading,
 }) => {
-  // Local state fallback so typing ALWAYS updates state and unlocks the button
   const [localProductName, setLocalProductName] = useState('');
   const [dragActive, setDragActive] = useState(false);
 
@@ -122,7 +121,6 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
   const customSensitivitiesCount = userPreferences.customSensitivities?.length || 0;
   const totalActiveFlagsCount = activePresetCount + customSensitivitiesCount;
 
-  // Check if button should be disabled (unlocked if ANY field has value)
   const isInputEmpty = !activeProductName.trim() && !ingredientInput.trim() && !selectedImage && !barcodeInput.trim();
 
   return (
@@ -279,7 +277,7 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
                   <Barcode className="w-6 h-6 sm:w-7 sm:h-7 text-cyan-400 mr-3 sm:mr-0 sm:mb-2 group-hover:scale-110 transition-transform flex-shrink-0" />
                   <div className="text-left sm:text-center">
                     <span className="text-xs sm:text-sm font-bold block">Scan Barcode</span>
-                    <span className="text-[10px] text-slate-400 block sm:mt-0.5">Use shutter camera</span>
+                    <span className="text-[10px] text-slate-400 block sm:mt-0.5">Use laser camera</span>
                   </div>
                 </button>
 
