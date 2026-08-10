@@ -16,67 +16,71 @@ export const CameraModal: React.FC<CameraModalProps> = ({
   mode = 'barcode',
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const codeReaderRef = useRef<BrowserMultiFormatReader | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const [scanMessage, setScanMessage] = useState<string>('Align barcode inside the laser frame...');
+  const [scanMessage, setScanMessage] = useState<string>('Initializing camera...');
 
   useEffect(() => {
     if (!isOpen) return;
 
-    let selectedDeviceId: string;
-    const codeReader = new BrowserMultiFormatReader();
-    codeReaderRef.current = codeReader;
+    let activeStream: MediaStream | null = null;
+    let codeReader: BrowserMultiFormatReader | null = null;
 
     setCameraError(null);
-    setScanMessage('Initializing high-speed scanner...');
 
-    if (mode === 'barcode') {
-      codeReader
-        .listVideoInputDevices()
-        .then((videoInputDevices) => {
-          // Prefer back/environment facing camera on phones
-          const backCamera = videoInputDevices.find((device) =>
-            /back|rear|environment/i.test(device.label)
-          );
-          selectedDeviceId = backCamera ? backCamera.deviceId : videoInputDevices[0]?.deviceId;
+    const initCameraAndScanner = async () => {
+      try {
+        // Step 1: Explicitly request camera permissions through native Web API first
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1920, min: 1280 },
+            height: { ideal: 1080, min: 720 },
+          },
+        });
 
-          return codeReader.decodeFromVideoDevice(
-            selectedDeviceId,
-            videoRef.current,
-            (result, err) => {
-              if (result) {
-                const scannedCode = result.getText();
-                if (scannedCode) {
-                  setScanMessage(`Scanned: ${scannedCode}`);
-                  // Stop scanning and pass scanned GTIN code back
-                  codeReader.reset();
-                  onCapture(scannedCode, 'barcode');
+        activeStream = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+
+        // Step 2: Attach ZXing barcode reader only in barcode mode
+        if (mode === 'barcode') {
+          setScanMessage('Align barcode inside the red frame...');
+          codeReader = new BrowserMultiFormatReader();
+
+          codeReader.decodeFromVideoElement(videoRef.current!, (result) => {
+            if (result) {
+              const code = result.getText();
+              if (code) {
+                setScanMessage(`Scanned GTIN: ${code}`);
+                if (codeReader) codeReader.reset();
+                if (activeStream) {
+                  activeStream.getTracks().forEach((track) => track.stop());
                 }
+                onCapture(code, 'barcode');
               }
             }
-          );
-        })
-        .catch((err) => {
-          console.error('ZXing camera error:', err);
-          setCameraError('Camera access denied or device not supported.');
-        });
-    } else {
-      // Standard camera stream for label photo capture
-      navigator.mediaDevices
-        .getUserMedia({
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 } },
-        })
-        .then((stream) => {
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-          }
-        })
-        .catch(() => setCameraError('Camera access failed.'));
-    }
+          });
+        } else {
+          setScanMessage('Point camera at ingredient list and tap Take Photo.');
+        }
+      } catch (err: any) {
+        console.error('Camera access error:', err);
+        setCameraError(
+          'Camera access blocked or unavailable. Please check your browser site permissions.'
+        );
+      }
+    };
+
+    initCameraAndScanner();
 
     return () => {
-      if (codeReaderRef.current) {
-        codeReaderRef.current.reset();
+      if (codeReader) {
+        codeReader.reset();
+      }
+      if (activeStream) {
+        activeStream.getTracks().forEach((track) => track.stop());
       }
     };
   }, [isOpen, mode]);
@@ -97,14 +101,18 @@ export const CameraModal: React.FC<CameraModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl space-y-4 p-4 relative">
+    <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-2 sm:p-4">
+      <div
+        className={`bg-slate-900 border border-slate-800 w-full ${
+          mode === 'barcode' ? 'max-w-3xl' : 'max-w-xl'
+        } rounded-2xl overflow-hidden shadow-2xl space-y-3 p-4 relative transition-all`}
+      >
         <div className="flex items-center justify-between pb-2 border-b border-slate-800">
           <h3 className="font-bold text-white text-sm sm:text-base flex items-center">
             {mode === 'barcode' ? (
               <>
                 <ScanLine className="w-5 h-5 mr-2 text-cyan-400 animate-pulse" />
-                ZXing Laser Barcode Scanner
+                High-Precision Barcode Scanner
               </>
             ) : (
               <>
@@ -122,11 +130,15 @@ export const CameraModal: React.FC<CameraModalProps> = ({
         </div>
 
         {cameraError ? (
-          <div className="bg-rose-950/40 border border-rose-500/30 p-4 rounded-xl text-xs text-rose-300 text-center">
+          <div className="bg-rose-950/40 border border-rose-500/30 p-6 rounded-xl text-xs sm:text-sm text-rose-300 text-center">
             {cameraError}
           </div>
         ) : (
-          <div className="relative rounded-xl overflow-hidden bg-slate-950 aspect-[4/3] flex items-center justify-center shadow-inner">
+          <div
+            className={`relative rounded-xl overflow-hidden bg-slate-950 ${
+              mode === 'barcode' ? 'aspect-video' : 'aspect-[4/3]'
+            } flex items-center justify-center shadow-inner`}
+          >
             <video
               ref={videoRef}
               autoPlay
@@ -135,38 +147,38 @@ export const CameraModal: React.FC<CameraModalProps> = ({
               className="w-full h-full object-cover"
             />
 
-            {/* Laser Viewfinder Box for Barcode Mode */}
+            {/* Viewfinder Overlays */}
             {mode === 'barcode' ? (
               <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
-                <div className="w-3/4 h-0.5 bg-red-500 shadow-[0_0_15px_#ef4444] animate-pulse" />
-                <div className="absolute w-4/5 h-24 border-2 border-dashed border-red-500/60 rounded-xl bg-red-500/5 flex items-end justify-center pb-2">
-                  <span className="text-[10px] font-mono text-red-300 bg-slate-950/90 px-2 py-0.5 rounded border border-red-500/30">
-                    HOLD BARCODE STILL
+                <div className="w-4/5 h-0.5 bg-red-500 shadow-[0_0_20px_#ef4444] animate-pulse" />
+                <div className="absolute w-5/6 h-36 border-2 border-dashed border-red-500/70 rounded-2xl bg-red-500/5 flex items-end justify-center pb-3">
+                  <span className="text-xs font-mono font-bold text-red-200 bg-slate-950/90 px-3 py-1 rounded-full border border-red-500/40">
+                    ALIGN BARCODE HERE
                   </span>
                 </div>
               </div>
             ) : (
               <div className="absolute inset-0 border-2 border-dashed border-emerald-500/40 pointer-events-none m-6 rounded-xl flex items-end justify-center pb-4">
                 <span className="text-[11px] font-medium text-emerald-300 bg-slate-950/80 px-3 py-1 rounded-full border border-emerald-500/30">
-                  Center food label text
+                  Center food ingredient list inside frame
                 </span>
               </div>
             )}
           </div>
         )}
 
-        <div className="flex flex-col sm:flex-row items-center justify-between pt-2 gap-3">
+        <div className="flex flex-col sm:flex-row items-center justify-between pt-1 gap-3">
           <span className="text-xs text-slate-400 text-center sm:text-left font-mono">
-            {mode === 'barcode' ? scanMessage : 'Take a snapshot of the ingredient list.'}
+            {scanMessage}
           </span>
           {mode === 'image' && (
             <button
               type="button"
               onClick={handleManualSnapshot}
-              className="w-full sm:w-auto px-5 py-2 py-2.5 rounded-xl font-bold text-xs bg-emerald-500 hover:bg-emerald-400 text-slate-950 flex items-center justify-center shadow-lg"
+              className="w-full sm:w-auto px-6 py-2.5 rounded-xl font-bold text-xs bg-emerald-500 hover:bg-emerald-400 text-slate-950 flex items-center justify-center shadow-lg transition-all"
             >
-              <Camera className="w-4 h-4 mr-1" />
-              <span>Capture Label Photo</span>
+              <Camera className="w-4 h-4 mr-2" />
+              <span>Take Photo</span>
             </button>
           )}
         </div>
