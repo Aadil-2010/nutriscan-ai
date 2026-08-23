@@ -11,6 +11,7 @@ import { AuthScreen } from './components/AuthScreen';
 import { CameraModal } from './components/CameraModal';
 import { AdditiveDetailModal } from './components/AdditiveDetailModal';
 import { PreferencesModal } from './components/PreferencesModal';
+import { HealthChatbot } from './components/HealthChatbot';
 import { 
   NutriScanResult, 
   AdditiveItem, 
@@ -403,6 +404,9 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* Health & First Aid Floating Chatbot */}
+      <HealthChatbot />
 
       {/* Camera Capture Modal */}
       <CameraModal
