@@ -3,12 +3,10 @@ import {
   Bot, 
   Send, 
   X, 
-  MessageSquare, 
-  AlertTriangle, 
   HeartPulse, 
+  AlertTriangle, 
   Flame, 
-  Sparkles,
-  RefreshCw
+  RefreshCw 
 } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 
@@ -56,9 +54,31 @@ export const HealthChatbot: React.FC = () => {
     setLoading(true);
 
     try {
-      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
-      const ai = new GoogleGenAI({ apiKey });
+      // 1. Try Backend API Route first (Preferred & Secure)
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: textToSend }),
+      });
 
+      if (res.ok) {
+        const data = await res.json();
+        setMessages((prev) => [...prev, { role: 'assistant', content: data.reply }]);
+        return;
+      }
+
+      // 2. Client-side Fallback using Google GenAI SDK
+      const clientApiKey = 
+        (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_GEMINI_API_KEY) ||
+        (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) ||
+        (import.meta as any)?.env?.VITE_GEMINI_API_KEY ||
+        '';
+
+      if (!clientApiKey) {
+        throw new Error('No API key found in server or client configuration.');
+      }
+
+      const ai = new GoogleGenAI({ apiKey: clientApiKey });
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: [
@@ -67,9 +87,10 @@ export const HealthChatbot: React.FC = () => {
             parts: [
               {
                 text: `You are FoodWise AI Health & First Aid Assistant. 
-Provide clear, actionable, safety-first guidance for food-related health questions, additive queries, and standard first-aid protocols. 
-Use clear bullet points and bold highlights for critical first-aid actions. 
-Always include a brief reminder to seek emergency medical attention (e.g., calling 911 / emergency services) if symptoms are severe or life-threatening.
+Provide concise, clear, and actionable advice for dietary queries, ingredient safety, and first-aid protocols. 
+Use bullet points and bold highlights for critical actions.
+If the query is a simple greeting, reply warmly and introduce what you can assist with.
+Always include a short safety reminder if life-threatening symptoms are mentioned.
 
 User query: ${textToSend}`,
               },
@@ -78,14 +99,15 @@ User query: ${textToSend}`,
         ],
       });
 
-      const reply = response.text || 'I apologize, but I could not generate a response. Please try again.';
+      const reply = response.text || 'I could not generate a response. Please try again.';
       setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Chatbot error:', error);
       setMessages((prev) => [
         ...prev,
         {
           role: 'assistant',
-          content: 'Unable to connect to the medical knowledge base right now. For emergency medical situations, please contact your local emergency services immediately.',
+          content: 'Unable to connect to the medical knowledge base right now. Please verify your GEMINI_API_KEY environment variable. For emergency medical situations, contact local emergency services immediately.',
         },
       ]);
     } finally {
@@ -133,7 +155,7 @@ User query: ${textToSend}`,
             </div>
 
             {/* Quick Prompts Bar */}
-            <div className="px-4 py-2 bg-slate-950/40 border-b border-slate-800 flex gap-2 overflow-x-auto no-scrollbar">
+            <div className="px-4 py-2 bg-slate-950/40 border-b border-slate-800 flex gap-2 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
               {QUICK_PROMPTS.map((item, idx) => {
                 const Icon = item.icon;
                 return (
@@ -197,7 +219,7 @@ User query: ${textToSend}`,
                 <button
                   type="submit"
                   disabled={loading || !input.trim()}
-                  className="p-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 rounded-xl transition-all"
+                  className="p-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 rounded-xl transition-all cursor-pointer"
                 >
                   <Send className="w-4 h-4" />
                 </button>
