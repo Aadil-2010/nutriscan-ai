@@ -53,61 +53,28 @@ export const HealthChatbot: React.FC = () => {
     setLoading(true);
 
     try {
-      const apiKey = 
-        (import.meta as any).env?.VITE_GEMINI_API_KEY ||
-        (typeof process !== 'undefined' && (process.env?.VITE_GEMINI_API_KEY || process.env?.GEMINI_API_KEY)) ||
-        '';
-
-      if (!apiKey) {
-        throw new Error('VITE_GEMINI_API_KEY is missing from environment variables.');
-      }
-
-      // Direct REST API call bypassing SDK OAuth restrictions
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-
-      const res = await fetch(endpoint, {
+      const res = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: 'user',
-              parts: [
-                {
-                  text: `You are FoodWise AI Health & First Aid Assistant.
-Provide concise, clear, and actionable advice for dietary queries, ingredient safety, and first-aid protocols.
-Use bullet points and bold text for key actions.
-If the query is a greeting, reply politely and state how you can assist.
-Always include a short reminder to contact emergency services for severe symptoms.
-
-User query: ${textToSend}`,
-                },
-              ],
-            },
-          ],
-        }),
+        body: JSON.stringify({ message: textToSend }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error?.message || `HTTP ${res.status} Error`);
+        throw new Error(data.error || `Server returned error status ${res.status}`);
       }
 
-      const reply = 
-        data.candidates?.[0]?.content?.parts?.[0]?.text || 
-        'I could not generate a response. Please try again.';
-
-      setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
+      setMessages((prev) => [...prev, { role: 'assistant', content: data.reply }]);
     } catch (error: any) {
       console.error('Chat error:', error);
       setMessages((prev) => [
         ...prev,
         {
           role: 'assistant',
-          content: `Error: ${error.message || 'Unable to connect to knowledge base.'}`,
+          content: 'Unable to connect to the medical knowledge base right now. For emergency medical situations, please contact your local emergency services immediately.',
         },
       ]);
     } finally {

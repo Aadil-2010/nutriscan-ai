@@ -10,6 +10,7 @@ export default async function handler(req: any, res: any) {
     return res.status(400).json({ error: 'Message is required' });
   }
 
+  // Uses the exact same server-side key as your scanner API
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return res.status(500).json({ error: 'GEMINI_API_KEY environment variable is not configured on the server.' });
@@ -24,8 +25,8 @@ export default async function handler(req: any, res: any) {
           role: 'user',
           parts: [
             {
-              text: `You are FoodWise AI Health & First Aid Assistant. 
-Provide concise, clear, and actionable advice for dietary queries, ingredient safety, and first-aid protocols. 
+              text: `You are FoodWise AI Health & First Aid Assistant.
+Provide concise, clear, and actionable advice for dietary queries, ingredient safety, and first-aid protocols.
 Use bullet points and bold highlights for critical actions.
 If the query is a simple greeting, reply warmly and introduce what you can assist with.
 Always include a short safety reminder if life-threatening symptoms are mentioned.
