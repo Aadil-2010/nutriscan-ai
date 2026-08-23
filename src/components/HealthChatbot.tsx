@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { GoogleGenAI } from '@google/genai';
 import { 
   Bot, 
   Send, 
@@ -55,57 +56,38 @@ export const HealthChatbot: React.FC = () => {
     try {
       const apiKey = 
         (import.meta as any).env?.VITE_GEMINI_API_KEY ||
+        (import.meta as any).env?.GEMINI_API_KEY ||
         (typeof process !== 'undefined' && (process.env?.VITE_GEMINI_API_KEY || process.env?.GEMINI_API_KEY)) ||
         '';
 
       if (!apiKey) {
-        throw new Error('No API key found in environment.');
+        throw new Error('API key not found. Please set VITE_GEMINI_API_KEY in your .env.local file.');
       }
 
-      // Supports both standard AIzaSy keys and AQ tokens
-      const isAQToken = apiKey.startsWith('AQ.');
-      const endpoint = isAQToken
-        ? 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
-        : `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+      // Initialize the official Google Gen AI SDK
+      const ai = new GoogleGenAI({ apiKey });
 
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-
-      if (isAQToken) {
-        headers['Authorization'] = `Bearer ${apiKey}`;
-      }
-
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          contents: [
-            {
-              role: 'user',
-              parts: [
-                {
-                  text: `You are FoodWise AI Health & First Aid Assistant.
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                text: `You are FoodWise AI Health & First Aid Assistant.
 Provide concise, clear, and actionable advice for dietary queries, ingredient safety, and first-aid protocols.
 Use bullet points and bold highlights for critical actions.
 If the query is a simple greeting, reply warmly and introduce what you can assist with.
 Always include a short safety reminder if life-threatening symptoms are mentioned.
 
 User query: ${textToSend}`,
-                },
-              ],
-            },
-          ],
-        }),
+              },
+            ],
+          },
+        ],
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error?.message || `API Error: ${res.status}`);
-      }
-
-      const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response received. Please try again.';
+      const reply = response.text || 'I could not generate a response. Please try again.';
       setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
     } catch (error: any) {
       console.error('Chat error:', error);
