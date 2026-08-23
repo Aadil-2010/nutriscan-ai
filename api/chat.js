@@ -12,7 +12,7 @@ export default async function handler(req: any, res: any) {
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'GEMINI_API_KEY is not configured on the server.' });
+    return res.status(500).json({ error: 'GEMINI_API_KEY environment variable is not configured on the server.' });
   }
 
   try {
@@ -26,8 +26,8 @@ export default async function handler(req: any, res: any) {
             {
               text: `You are FoodWise AI Health & First Aid Assistant. 
 Provide concise, clear, and actionable advice for dietary queries, ingredient safety, and first-aid protocols. 
-Use bullet points and bold highlights for steps.
-If the query is a greeting, reply politely.
+Use bullet points and bold highlights for critical actions.
+If the query is a simple greeting, reply warmly and introduce what you can assist with.
 Always include a short safety reminder if life-threatening symptoms are mentioned.
 
 User query: ${message}`,
@@ -37,7 +37,8 @@ User query: ${message}`,
       ],
     });
 
-    return res.status(200).json({ reply: response.text });
+    const reply = response.text || 'I could not generate a response. Please try again.';
+    return res.status(200).json({ reply });
   } catch (error: any) {
     console.error('Chat API Error:', error);
     return res.status(500).json({ error: error.message || 'Internal server error' });

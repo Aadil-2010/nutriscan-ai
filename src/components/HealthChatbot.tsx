@@ -8,7 +8,6 @@ import {
   Flame, 
   RefreshCw 
 } from 'lucide-react';
-import { GoogleGenAI } from '@google/genai';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -54,60 +53,29 @@ export const HealthChatbot: React.FC = () => {
     setLoading(true);
 
     try {
-      // 1. Try Backend API Route first (Preferred & Secure)
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: textToSend }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        setMessages((prev) => [...prev, { role: 'assistant', content: data.reply }]);
-        return;
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || `Server responded with status ${res.status}`);
       }
 
-      // 2. Client-side Fallback using Google GenAI SDK
-      const clientApiKey = 
-        (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_GEMINI_API_KEY) ||
-        (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) ||
-        (import.meta as any)?.env?.VITE_GEMINI_API_KEY ||
-        '';
-
-      if (!clientApiKey) {
-        throw new Error('No API key found in server or client configuration.');
-      }
-
-      const ai = new GoogleGenAI({ apiKey: clientApiKey });
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              {
-                text: `You are FoodWise AI Health & First Aid Assistant. 
-Provide concise, clear, and actionable advice for dietary queries, ingredient safety, and first-aid protocols. 
-Use bullet points and bold highlights for critical actions.
-If the query is a simple greeting, reply warmly and introduce what you can assist with.
-Always include a short safety reminder if life-threatening symptoms are mentioned.
-
-User query: ${textToSend}`,
-              },
-            ],
-          },
-        ],
-      });
-
-      const reply = response.text || 'I could not generate a response. Please try again.';
-      setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: data.reply || 'No response generated.' },
+      ]);
     } catch (error: any) {
-      console.error('Chatbot error:', error);
+      console.error('Chat error:', error);
       setMessages((prev) => [
         ...prev,
         {
           role: 'assistant',
-          content: 'Unable to connect to the medical knowledge base right now. Please verify your GEMINI_API_KEY environment variable. For emergency medical situations, contact local emergency services immediately.',
+          content: 'Unable to connect to the medical knowledge base right now. For emergency medical situations, please contact your local emergency services immediately.',
         },
       ]);
     } finally {
