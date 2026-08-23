@@ -53,28 +53,67 @@ export const HealthChatbot: React.FC = () => {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/chat', {
+      const apiKey = 
+        (import.meta as any).env?.VITE_GEMINI_API_KEY ||
+        (typeof process !== 'undefined' && (process.env?.VITE_GEMINI_API_KEY || process.env?.GEMINI_API_KEY)) ||
+        '';
+
+      if (!apiKey) {
+        throw new Error('No API key found in environment.');
+      }
+
+      // Supports both standard AIzaSy keys and AQ tokens
+      const isAQToken = apiKey.startsWith('AQ.');
+      const endpoint = isAQToken
+        ? 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
+        : `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      if (isAQToken) {
+        headers['Authorization'] = `Bearer ${apiKey}`;
+      }
+
+      const res = await fetch(endpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ message: textToSend }),
+        headers,
+        body: JSON.stringify({
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: `You are FoodWise AI Health & First Aid Assistant.
+Provide concise, clear, and actionable advice for dietary queries, ingredient safety, and first-aid protocols.
+Use bullet points and bold highlights for critical actions.
+If the query is a simple greeting, reply warmly and introduce what you can assist with.
+Always include a short safety reminder if life-threatening symptoms are mentioned.
+
+User query: ${textToSend}`,
+                },
+              ],
+            },
+          ],
+        }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || `Server returned error status ${res.status}`);
+        throw new Error(data.error?.message || `API Error: ${res.status}`);
       }
 
-      setMessages((prev) => [...prev, { role: 'assistant', content: data.reply }]);
+      const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response received. Please try again.';
+      setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
     } catch (error: any) {
       console.error('Chat error:', error);
       setMessages((prev) => [
         ...prev,
         {
           role: 'assistant',
-          content: 'Unable to connect to the medical knowledge base right now. For emergency medical situations, please contact your local emergency services immediately.',
+          content: `${error.message || 'Unable to connect to the knowledge base.'}`,
         },
       ]);
     } finally {
@@ -84,7 +123,6 @@ export const HealthChatbot: React.FC = () => {
 
   return (
     <>
-      {/* Floating Launcher Button */}
       <button
         onClick={() => setIsOpen(true)}
         className="fixed bottom-20 md:bottom-6 right-4 z-40 p-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold rounded-2xl shadow-xl shadow-emerald-500/20 flex items-center gap-2 active:scale-95 transition-all cursor-pointer"
@@ -94,12 +132,10 @@ export const HealthChatbot: React.FC = () => {
         <span className="text-xs font-extrabold hidden sm:inline">Health & First Aid</span>
       </button>
 
-      {/* Chat Window Modal */}
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-sm">
           <div className="w-full max-w-lg h-[90vh] sm:h-[600px] bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl flex flex-col shadow-2xl overflow-hidden">
             
-            {/* Header */}
             <div className="p-4 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
@@ -121,7 +157,6 @@ export const HealthChatbot: React.FC = () => {
               </button>
             </div>
 
-            {/* Quick Prompts Bar */}
             <div className="px-4 py-2 bg-slate-950/40 border-b border-slate-800 flex gap-2 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
               {QUICK_PROMPTS.map((item, idx) => {
                 const Icon = item.icon;
@@ -138,7 +173,6 @@ export const HealthChatbot: React.FC = () => {
               })}
             </div>
 
-            {/* Messages Area */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.map((msg, index) => (
                 <div
@@ -167,7 +201,6 @@ export const HealthChatbot: React.FC = () => {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input Bar */}
             <div className="p-3 bg-slate-950 border-t border-slate-800">
               <form
                 onSubmit={(e) => {
