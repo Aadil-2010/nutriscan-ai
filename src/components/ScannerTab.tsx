@@ -5,7 +5,6 @@ import {
   Sparkles, 
   RotateCcw, 
   SlidersHorizontal, 
-  FileText, 
   ArrowRight,
   Barcode,
   Database,
@@ -132,7 +131,7 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
             Analyze Food Ingredients & Additive Safety
           </h1>
           <p className="text-xs sm:text-sm md:text-base text-slate-300 mt-1.5 sm:mt-2 leading-relaxed">
-            Provide a product name, ingredient label list, or package photo. NutriScan AI extracts E-Numbers/INS codes, maps functional classes, detects IgE/non-IgE sensitivities, and evaluates ADI safety.
+            Provide a product name, scan barcode, or snap a package photo. FoodWise AI extracts E-Numbers/INS codes, maps functional classes, detects IgE/non-IgE sensitivities, and evaluates ADI safety.
           </p>
         </div>
       </div>
@@ -144,13 +143,22 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
 
           {/* Item Name Field */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-2">
-            <label htmlFor="product-name-input" className="text-xs sm:text-sm font-semibold text-slate-200 flex items-center justify-between">
-              <span className="flex items-center">
+            <div className="flex items-center justify-between">
+              <label htmlFor="product-name-input" className="text-xs sm:text-sm font-semibold text-slate-200 flex items-center">
                 <Tag className="w-4 h-4 mr-2 text-emerald-400 flex-shrink-0" />
                 Product / Item Name
-              </span>
-              <span className="text-[10px] text-slate-400 font-normal">(Direct search by name supported)</span>
-            </label>
+              </label>
+              {(selectedImage || barcodeInput || activeProductName) && (
+                <button
+                  type="button"
+                  onClick={handleClear}
+                  className="text-xs text-slate-400 hover:text-rose-400 flex items-center transition-colors px-1"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 mr-1" />
+                  Clear All
+                </button>
+              )}
+            </div>
             <input
               id="product-name-input"
               type="text"
@@ -222,38 +230,10 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
             </div>
           </div>
 
-          {/* Ingredient Text Field */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3">
-            <div className="flex items-center justify-between">
-              <label htmlFor="ingredient-textarea" className="text-xs sm:text-sm font-semibold text-slate-200 flex items-center">
-                <FileText className="w-4 h-4 mr-2 text-emerald-400 flex-shrink-0" />
-                Paste or Type Ingredients List
-              </label>
-              {(ingredientInput || selectedImage || barcodeInput || activeProductName) && (
-                <button
-                  type="button"
-                  onClick={handleClear}
-                  className="text-xs text-slate-400 hover:text-rose-400 flex items-center transition-colors min-h-[32px] px-1"
-                >
-                  <RotateCcw className="w-3.5 h-3.5 mr-1" />
-                  Clear All
-                </button>
-              )}
-            </div>
-
-            <textarea
-              id="ingredient-textarea"
-              value={ingredientInput}
-              onChange={(e) => setIngredientInput(e.target.value)}
-              placeholder="e.g. Potatoes, Vegetable Oil, Salt, Citric Acid (INS 330), Sodium Benzoate..."
-              className="w-full h-28 sm:h-32 bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/60 rounded-xl p-3 text-base sm:text-sm text-slate-100 placeholder-slate-500 resize-none outline-none transition-all"
-            />
-          </div>
-
           {/* Camera Triggers & Dropzone */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3.5">
             <span className="text-xs sm:text-sm font-semibold text-slate-200 block">
-              Or Capture Image / Attach Package Label
+              Capture Image / Attach Package Label
             </span>
 
             {selectedImage ? (
@@ -333,7 +313,7 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
               ) : (
                 <>
                   <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-                  <span>Run NutriScan AI Analysis</span>
+                  <span>Analyse</span>
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform flex-shrink-0" />
                 </>
               )}
@@ -415,7 +395,7 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
               ) : (
                 <>
                   <Sparkles className="w-5 h-5" />
-                  <span>Run NutriScan AI Analysis</span>
+                  <span>Analyse</span>
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </>
               )}

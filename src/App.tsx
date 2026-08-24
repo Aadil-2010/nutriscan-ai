@@ -11,7 +11,6 @@ import { AuthScreen } from './components/AuthScreen';
 import { CameraModal } from './components/CameraModal';
 import { AdditiveDetailModal } from './components/AdditiveDetailModal';
 import { PreferencesModal } from './components/PreferencesModal';
-import { PatientSignInModal } from './components/PatientSignInModal';
 import { HealthChatbot } from './components/HealthChatbot';
 import { 
   NutriScanResult, 
@@ -55,7 +54,6 @@ export default function App() {
   const [cameraMode, setCameraMode] = useState<'label' | 'barcode'>('barcode');
   const [selectedAdditiveModal, setSelectedAdditiveModal] = useState<AdditiveItem | null>(null);
   const [isPrefsOpen, setIsPrefsOpen] = useState<boolean>(false);
-  const [isPatientAuthOpen, setIsPatientAuthOpen] = useState<boolean>(false);
   const [showEthicalBoard, setShowEthicalBoard] = useState<boolean>(false);
 
   // User health preferences state
@@ -230,6 +228,7 @@ export default function App() {
     }).length
   );
 
+  // Initial Mandatory Gate: Patient Sign-in / Intake Screen
   if (!userProfile || !userProfile.isLoggedIn) {
     return <AuthScreen onLoginSuccess={handleLoginSuccess} />;
   }
@@ -247,7 +246,7 @@ export default function App() {
         onLogout={handleLogout}
       />
 
-      {/* Disclaimer Banner Toggle */}
+      {/* Disclaimer Banner */}
       <div className="bg-slate-900/90 border-b border-slate-800 py-2.5 px-4 text-xs">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center space-x-2 text-slate-300">
@@ -260,11 +259,11 @@ export default function App() {
           <div className="flex items-center gap-2">
             <button 
               type="button"
-              onClick={() => setIsPatientAuthOpen(true)}
+              onClick={() => setActiveTab('health-profile')}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg shadow-sm transition-all cursor-pointer"
             >
               <span>👤</span>
-              <span>Patient Profile</span>
+              <span>{userProfile.name} (Edit Profile)</span>
             </button>
 
             <button 
@@ -326,7 +325,6 @@ export default function App() {
 
       {/* Main Content Workspace Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 pb-32 md:pb-8">
-        {/* Top Priority Allergen Alert Banner */}
         {analysisResult?.allergen_alert?.detected && (
           <div className="mb-6 bg-red-950/90 border-2 border-red-500 text-red-100 p-5 rounded-2xl shadow-2xl animate-pulse">
             <div className="flex items-start gap-3">
@@ -417,21 +415,6 @@ export default function App() {
           </div>
         </div>
       </footer>
-
-      {/* Patient Sign-In Modal */}
-      <PatientSignInModal
-        isOpen={isPatientAuthOpen}
-        onClose={() => setIsPatientAuthOpen(false)}
-        onSuccess={(patient) => {
-          if (userProfile) {
-            setUserProfile({
-              ...userProfile,
-              name: patient.name || userProfile.name,
-              email: patient.email || userProfile.email,
-            });
-          }
-        }}
-      />
 
       {/* Health & First Aid Floating Chatbot */}
       <HealthChatbot />
