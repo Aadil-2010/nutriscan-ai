@@ -259,15 +259,6 @@ export default function App() {
           <div className="flex items-center gap-2">
             <button 
               type="button"
-              onClick={() => setActiveTab('health-profile')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg shadow-sm transition-all cursor-pointer"
-            >
-              <span>👤</span>
-              <span>{userProfile.name} (Edit Profile)</span>
-            </button>
-
-            <button 
-              type="button"
               onClick={() => setShowEthicalBoard(!showEthicalBoard)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg shadow-sm transition-all hover:border-emerald-500/60 active:scale-95 cursor-pointer flex-shrink-0"
             >
