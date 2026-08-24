@@ -7,7 +7,6 @@ import {
   AlertTriangle, 
   Flame, 
   ShieldCheck,
-  CheckCircle2,
   PhoneCall
 } from 'lucide-react';
 
@@ -17,81 +16,84 @@ interface Message {
 }
 
 const QUICK_PROMPTS = [
-  { label: 'Allergic Reaction', icon: AlertTriangle, query: 'What are the immediate first aid steps for an acute food allergic reaction?' },
-  { label: 'Minor Burn', icon: Flame, query: 'How do I provide first aid for a minor kitchen burn?' },
-  { label: 'Choking First Aid', icon: HeartPulse, query: 'What are the immediate first aid steps if someone is choking?' },
+  { label: 'Allergic Reaction', icon: AlertTriangle, query: 'What are the first aid steps for an allergic reaction?' },
+  { label: 'Minor Burn', icon: Flame, query: 'How to treat a minor kitchen burn?' },
+  { label: 'Choking First Aid', icon: HeartPulse, query: 'What to do if someone is choking?' },
 ];
 
-const HEALTH_KNOWLEDGE: { keywords: string[]; title: string; answer: string }[] = [
+const HEALTH_KNOWLEDGE: { keywords: string[]; answer: string }[] = [
   {
-    keywords: ['allergi', 'anaphylax', 'reaction', 'hives', 'swelling', 'peanut', 'nut', 'seafood', 'shellfish'],
-    title: 'Acute Food Allergic Reaction & Anaphylaxis Protocol',
-    answer: `**Immediate First Aid for Food Allergy / Anaphylaxis:**
+    keywords: ['allergi', 'anaphylax', 'reaction', 'hives', 'swelling', 'peanut', 'nut', 'seafood', 'shellfish', 'wheez', 'rash', 'itch'],
+    answer: `**Allergic Reaction / Anaphylaxis:**
 
-1. **Check for Red Flags**: Throat tightness, difficulty breathing, wheezing, dizziness, or widespread hives indicate **Anaphylaxis**.
-2. **Use Epinephrine (EpiPen)**: If the person has an auto-injector, inject it immediately into the outer mid-thigh. Hold for 3–5 seconds.
-3. **Call 911 / Emergency Services**: Always call emergency medical services immediately after using an auto-injector.
-4. **Position the Person**: Keep them lying flat with legs raised. If breathing is difficult or they are vomiting, allow them to sit up slightly.
-5. **Do NOT Give Oral Medication**: Do not give oral antihistamines or fluids if the person is struggling to swallow or breathe.`,
+1. **Inject EpiPen**: Use auto-injector in outer mid-thigh immediately.
+2. **Call 911 / 112**: Seek emergency medical support.
+3. **Lie Flat**: Keep legs elevated; sit upright only if breathing is difficult.
+4. **Avoid Oral Meds**: Do not give liquids or pills if swallowing is hard.`,
   },
   {
-    keywords: ['burn', 'scald', 'hot oil', 'hot water', 'pan', 'stove', 'oven'],
-    title: 'Kitchen Burn First Aid Protocol',
-    answer: `**First Aid for Kitchen Burns and Scalds:**
+    keywords: ['burn', 'scald', 'hot oil', 'hot water', 'pan', 'stove', 'oven', 'steam', 'fire'],
+    answer: `**Kitchen Burn Care:**
 
-1. **Cool Immediately**: Hold the burned area under cool, gentle running tap water for **10 to 20 minutes**.
-2. **Never Use Ice**: Do not apply ice, iced water, butter, toothpaste, or oil—they cause tissue damage and invite infection.
-3. **Remove Tight Items**: Take off rings, bracelets, or tight clothing around the area before swelling begins.
-4. **Cover Cleanly**: Loosely cover the area with a sterile, non-stick dressing or clean plastic food wrap.
-5. **Seek Urgent Care If**: The burn is larger than 3 inches, blistered deeply, on the face, hands, joints, or caused by chemicals.`,
+1. **Cool Water**: Run cool tap water over the burn for 10–15 minutes (never use ice).
+2. **Remove Jewelry**: Take off rings and watches before swelling begins.
+3. **Protect**: Cover loosely with a clean, non-stick dressing or plastic wrap.
+4. **No Ointments**: Do not apply butter, oil, or toothpaste.`,
   },
   {
-    keywords: ['chok', 'choking', 'heimlich', 'airway', 'blocked', 'swallow'],
-    title: 'Choking & Airway Obstruction First Aid',
-    answer: `**Protocol for Adult / Child Choking:**
+    keywords: ['chok', 'choking', 'heimlich', 'airway', 'blocked', 'swallow', 'throat', 'cough'],
+    answer: `**Choking First Aid:**
 
-*If the person is coughing forcefully, encourage them to continue coughing.*
-
-**If they cannot speak, cry, cough, or breathe:**
-1. **5 Back Blows**: Lean the person forward, support their chest with one hand, and give 5 firm blows between shoulder blades with the heel of your hand.
-2. **5 Abdominal Thrusts (Heimlich)**:
-   * Stand behind them and wrap your arms around their waist.
-   * Make a fist just above the navel.
-   * Grasp your fist with the other hand and thrust sharply inward and upward.
-3. **Repeat Cycle**: Alternate 5 back blows and 5 abdominal thrusts until object is expelled.
-4. **If Unresponsive**: Lower to the floor and begin CPR immediately with chest compressions.`,
+1. **5 Back Blows**: Lean victim forward and strike firmly between shoulder blades.
+2. **5 Abdominal Thrusts**: Place fist above navel and pull inward/upward (Heimlich).
+3. **Alternate**: Repeat 5 blows and 5 thrusts until the airway clears.
+4. **If Unconscious**: Lower to the floor and start CPR compressions immediately.`,
   },
   {
-    keywords: ['cut', 'bleed', 'knife', 'wound', 'laceration', 'blood'],
-    title: 'Kitchen Cut & Laceration Management',
-    answer: `**First Aid for Deep Cuts and Bleeding:**
+    keywords: ['cut', 'bleed', 'knife', 'wound', 'laceration', 'blood', 'slice', 'finger'],
+    answer: `**Kitchen Cut / Bleeding:**
 
-1. **Direct Pressure**: Place a clean cloth or sterile gauze over the cut and press down firmly without letting go for 5–10 full minutes.
-2. **Elevate**: Elevate the injured hand or limb above the heart to reduce blood flow.
-3. **Cleanse**: Once bleeding stops, rinse the wound gently with cool tap water and clean surrounding skin with mild soap.
-4. **Bandage**: Apply antibiotic ointment and seal with a sterile adhesive bandage.
-5. **Seek Stitches If**: The wound edges gap open, you see yellow fat/muscle, or bleeding does not stop after 10 minutes of direct pressure.`,
+1. **Direct Pressure**: Press firmly on the wound with a clean cloth for 5 minutes.
+2. **Elevate**: Keep the injured hand or arm above heart level.
+3. **Cleanse**: Rinse with cool water and mild soap around the edge.
+4. **Bandage**: Apply antiseptic and a sterile dressing. Seek stitches if bleeding persists.`,
   },
   {
-    keywords: ['msg', 'monosodium glutamate', 'e621', 'preservative', 'additive', 'nitrite', 'nitrate', 'aspartame', 'e-number'],
-    title: 'Food Additive & Chemical Safety Guide',
-    answer: `**Food Additives & Allergen Safety Insights:**
+    keywords: ['poison', 'nausea', 'vomit', 'diarrhea', 'salmonella', 'spoil', 'stomach', 'cramp', 'fever', 'expired', 'bad food'],
+    answer: `**Food Poisoning Steps:**
 
-* **Monosodium Glutamate (E621)**: Globally classified as safe by FDA and EFSA. A small subgroup may experience mild, transient sensitivity (flushing, mild headache).
-* **Sodium Nitrite / Nitrate (E250-E252)**: Used in cured meats to prevent botulism. Moderation is recommended to limit dietary nitrosamines.
-* **Sulfites (E220-E228)**: Common preservative in wine and dried fruits. High risk for asthmatics and sulfur-sensitive individuals.
-* **Artificial Colors (Tartrazine E102, Allura Red E129)**: May exacerbate hyperactivity in sensitive children; require warning labels in the EU.`,
+1. **Rehydrate**: Sip electrolyte solution or oral rehydration salts slowly.
+2. **Rest Stomach**: Avoid solid foods for a few hours until vomiting stops.
+3. **Bland Diet**: Eat plain toast, crackers, bananas, or rice.
+4. **Seek Medical Care**: If fever exceeds 102°F (38.8°C), blood appears, or vomiting lasts over 24h.`,
   },
   {
-    keywords: ['food poison', 'nausea', 'vomit', 'diarrhea', 'salmonella', 'spoil', 'stomach pain'],
-    title: 'Suspected Food Poisoning Protocol',
-    answer: `**First Aid for Foodborne Illness / Food Poisoning:**
+    keywords: ['msg', 'monosodium', 'e621', 'preservative', 'additive', 'nitrite', 'nitrate', 'aspartame', 'e-number', 'chemical', 'sugar', 'sodium', 'salt'],
+    answer: `**Additive & Chemical Safety:**
 
-1. **Hydration First**: Sip small amounts of electrolyte solution, oral rehydration salts (ORS), or clear broth.
-2. **Avoid Immediate Anti-Diarrheals**: In many bacterial infections, letting the body flush pathogens is important unless directed by a physician.
-3. **Bland Diet (BRAT)**: When nausea subsides, introduce bananas, rice, applesauce, and toast.
-4. **Call a Doctor If**: High fever (>102°F / 38.8°C), severe dehydration (dark urine, dizziness), blood in stool, or vomiting lasting >24 hours.`,
-  }
+1. **MSG (E621)**: Globally approved as safe; minor sensitivity causes brief headaches.
+2. **Nitrites (E250)**: Limit heavy consumption in processed meats.
+3. **Sulfites (E220)**: Check wine and dried fruit labels if you have asthma.
+4. **Artificial Sweeteners**: Safe within regulated daily limits; adjust if bloating occurs.`,
+  },
+  {
+    keywords: ['eye', 'splash', 'chili', 'pepper', 'chemical', 'irritat'],
+    answer: `**Eye Irritation / Chemical Splash:**
+
+1. **Flush**: Rinse the open eye under cool running water for 15 minutes.
+2. **Remove Contacts**: Take out contact lenses immediately.
+3. **Do Not Rub**: Keep hands away from eyes to prevent corneal scratches.
+4. **Seek Help**: Visit urgent care if stinging or blurred vision continues.`,
+  },
+  {
+    keywords: ['faint', 'dizzi', 'lighthead', 'pass out', 'blackout'],
+    answer: `**Fainting / Dizziness:**
+
+1. **Lie Down**: Keep the person flat and raise feet 12 inches.
+2. **Loosen Clothing**: Open tight collars and ensure fresh air.
+3. **Check Breathing**: Ensure the airway is open and clear.
+4. **Hydrate Slowly**: Offer water only once fully conscious and alert.`,
+  },
 ];
 
 export const HealthChatbot: React.FC = () => {
@@ -101,7 +103,7 @@ export const HealthChatbot: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: 'Hello! I am your FoodWise Health & First Aid Assistant. How can I assist you with kitchen first aid, allergen reactions, or food additive queries today?',
+      content: 'Hello! I am your Health & First Aid Assistant. Ask me about cuts, burns, allergic reactions, choking, or food additive queries.',
     },
   ]);
 
@@ -125,40 +127,48 @@ export const HealthChatbot: React.FC = () => {
     setTimeout(() => {
       const lowerQuery = textToSend.toLowerCase();
 
-      // Greeting detection
-      if (/^(hi|hello|hey|greetings|help)/i.test(lowerQuery.trim()) && lowerQuery.trim().split(' ').length <= 2) {
+      // Greeting check
+      if (/^(hi|hello|hey|greetings|help)(\s|$)/i.test(lowerQuery.trim()) && lowerQuery.trim().split(' ').length <= 2) {
         setMessages((prev) => [
           ...prev,
           {
             role: 'assistant',
-            content: 'Hello! I am standing by to assist. You can ask me about:\n\n* **Acute allergic reactions & EpiPen usage**\n* **Kitchen burns & scald first aid**\n* **Choking & Heimlich maneuver**\n* **Deep cuts & bleeding control**\n* **Food additive / E-number safety**',
+            content: `**How I Can Help:**
+
+1. **Allergies & Anaphylaxis**: Immediate action and EpiPen steps.
+2. **Kitchen Burns**: First aid cooling and bandaging.
+3. **Choking**: Back blows and Heimlich instructions.
+4. **Cuts & Bleeding**: Pressure and wound cleansing.
+5. **Food Additives & Poisoning**: Toxicity levels and rehydration care.`,
           },
         ]);
         setLoading(false);
         return;
       }
 
-      // Keyword matching across clinical triage database
+      // Keyword match
       const matched = HEALTH_KNOWLEDGE.find((item) =>
         item.keywords.some((kw) => lowerQuery.includes(kw))
       );
 
       if (matched) {
-        setMessages((prev) => [
-          ...prev,
-          { role: 'assistant', content: matched.answer },
-        ]);
+        setMessages((prev) => [...prev, { role: 'assistant', content: matched.answer }]);
       } else {
         setMessages((prev) => [
           ...prev,
           {
             role: 'assistant',
-            content: `**Clinical First Aid & Food Safety Notice:**\n\n* **Emergency Rule**: For severe respiratory distress, facial swelling, or heavy bleeding, immediately contact your local emergency medical hotline.\n* **Ingredient Caution**: If you suspect an adverse food reaction, immediately halt consumption and inspect packaging for bold allergen declarations (milk, nuts, wheat, soy, eggs, shellfish).\n* **Burns & Cuts**: Always run cool tap water over burns for 15+ minutes and apply uninterrupted direct pressure on open cuts.\n\n*You can ask specifically about burns, cuts, choking, allergic reactions, food poisoning, or MSG/additives.*`,
+            content: `**General First Aid Steps:**
+
+1. **Emergency Check**: Dial 911 / 112 immediately if breathing is difficult or bleeding is severe.
+2. **Stop Consumption**: If reacting to food, discard it and check package allergens.
+3. **Basic Care**: Use cool running water for burns; apply steady pressure for cuts.
+4. **Ask Specifically**: Type words like *burn, cut, choke, allergy, poison, or additive* for exact steps.`,
           },
         ]);
       }
       setLoading(false);
-    }, 400);
+    }, 300);
   };
 
   return (
@@ -174,7 +184,7 @@ export const HealthChatbot: React.FC = () => {
 
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="w-full max-w-lg h-[90vh] sm:h-[600px] bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl flex flex-col shadow-2xl overflow-hidden">
+          <div className="w-full max-w-lg h-[90vh] sm:h-[580px] bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl flex flex-col shadow-2xl overflow-hidden">
             
             <div className="p-4 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -188,7 +198,7 @@ export const HealthChatbot: React.FC = () => {
                       <ShieldCheck className="w-3 h-3" /> Ready
                     </span>
                   </h3>
-                  <p className="text-[11px] text-slate-400">Instant triage, allergen & burn guidance</p>
+                  <p className="text-[11px] text-slate-400">Instant triage & emergency guidance</p>
                 </div>
               </div>
               <button
@@ -236,7 +246,7 @@ export const HealthChatbot: React.FC = () => {
                 <div className="flex justify-start">
                   <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl rounded-bl-none px-4 py-3 flex items-center gap-2 text-xs text-slate-400">
                     <HeartPulse className="w-3.5 h-3.5 animate-pulse text-emerald-400" />
-                    <span>Accessing clinical safety database...</span>
+                    <span>Processing protocol...</span>
                   </div>
                 </div>
               )}
@@ -255,7 +265,7 @@ export const HealthChatbot: React.FC = () => {
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="Ask about allergic reactions, burns, cuts, or additive safety..."
+                  placeholder="Ask about burns, cuts, allergies, choking, poisoning..."
                   className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50"
                 />
                 <button
@@ -268,7 +278,7 @@ export const HealthChatbot: React.FC = () => {
               </form>
               <div className="flex items-center justify-center gap-1.5 mt-2 text-[10px] text-slate-500">
                 <PhoneCall className="w-3 h-3 text-amber-500" />
-                <span>Emergency notice: For acute life-threatening symptoms, dial 911 / emergency services immediately.</span>
+                <span>Emergency: For life-threatening emergencies, dial 911 / 112 immediately.</span>
               </div>
             </div>
 
