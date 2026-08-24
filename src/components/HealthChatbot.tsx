@@ -4,10 +4,10 @@ import {
   Send, 
   X, 
   HeartPulse, 
-  ShieldCheck,
-  RotateCcw,
-  Stethoscope,
-  PhoneCall
+  ShieldCheck, 
+  RotateCcw, 
+  Stethoscope, 
+  PhoneCall 
 } from 'lucide-react';
 
 interface Message {
@@ -15,7 +15,7 @@ interface Message {
   content: string;
 }
 
-const STORAGE_KEY_CHAT = 'foodwise_ai_chat_history_v1';
+const STORAGE_KEY_CHAT = 'foodwise_ai_chat_history_v2';
 
 export const HealthChatbot: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -71,7 +71,7 @@ export const HealthChatbot: React.FC = () => {
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || `Server returned ${response.status}`);
+        throw new Error(errData.error || `Error ${response.status}`);
       }
 
       const data = await response.json();
@@ -82,7 +82,7 @@ export const HealthChatbot: React.FC = () => {
         ...updatedHistory,
         {
           role: 'assistant',
-          content: `**Clinical Notice:**\n\nUnable to reach the AI diagnosis service (${err.message}). For severe symptoms, throat swelling, or difficulty breathing, dial **911 / 112** or visit an urgent care center immediately.`,
+          content: `Unable to complete AI evaluation (${err.message}). Please re-send or visit urgent care if symptoms worsen.`,
         },
       ]);
     } finally {
@@ -113,10 +113,10 @@ export const HealthChatbot: React.FC = () => {
                   <h3 className="text-sm font-extrabold text-white flex items-center gap-1.5">
                     FoodWise Clinical AI
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 flex items-center gap-1">
-                      <ShieldCheck className="w-3 h-3" /> Live Gemini
+                      <ShieldCheck className="w-3 h-3" /> Live
                     </span>
                   </h3>
-                  <p className="text-[11px] text-slate-400">Symptom analysis, doctor referrals & first aid</p>
+                  <p className="text-[11px] text-slate-400">Symptom evaluation, doctor matching & first-aid triage</p>
                 </div>
               </div>
               <div className="flex items-center gap-1.5">
@@ -141,7 +141,7 @@ export const HealthChatbot: React.FC = () => {
                 <div className="text-center py-14 px-4 space-y-2 text-slate-500">
                   <HeartPulse className="w-9 h-9 text-emerald-500/40 mx-auto" />
                   <p className="text-xs text-slate-400 font-medium">
-                    Describe any symptom or ask health questions to begin AI clinical triage.
+                    Describe any physical symptoms or health concerns to begin AI triage.
                   </p>
                 </div>
               )}
@@ -166,7 +166,7 @@ export const HealthChatbot: React.FC = () => {
                 <div className="flex justify-start">
                   <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl rounded-bl-none px-4 py-3 flex items-center gap-2 text-xs text-slate-400">
                     <HeartPulse className="w-3.5 h-3.5 animate-pulse text-emerald-400" />
-                    <span>Gemini is evaluating clinical triage...</span>
+                    <span>Analyzing clinical scenario...</span>
                   </div>
                 </div>
               )}
@@ -185,7 +185,7 @@ export const HealthChatbot: React.FC = () => {
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="Describe symptoms, recent foods, or medical questions..."
+                  placeholder="Describe your symptom, timeline, or ask questions..."
                   className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/60"
                 />
                 <button
@@ -198,7 +198,7 @@ export const HealthChatbot: React.FC = () => {
               </form>
               <div className="flex items-center justify-center gap-1.5 mt-2 text-[10px] text-slate-500">
                 <PhoneCall className="w-3 h-3 text-amber-500" />
-                <span>Emergency: For chest pain, throat swelling, or acute trauma, dial 911 / 112 immediately.</span>
+                <span>Emergency: For throat swelling, breathing distress, or severe trauma, call 911 / 112 immediately.</span>
               </div>
             </div>
 
