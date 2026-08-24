@@ -4,9 +4,9 @@ import {
   Send, 
   X, 
   HeartPulse, 
-  AlertTriangle, 
-  Flame, 
   ShieldCheck,
+  RotateCcw,
+  Stethoscope,
   PhoneCall
 } from 'lucide-react';
 
@@ -15,24 +15,71 @@ interface Message {
   content: string;
 }
 
-const QUICK_PROMPTS = [
-  { label: 'Allergic Reaction', icon: AlertTriangle, query: 'What are the first aid steps for an allergic reaction?' },
-  { label: 'Minor Burn', icon: Flame, query: 'How to treat a minor kitchen burn?' },
-  { label: 'Choking First Aid', icon: HeartPulse, query: 'What to do if someone is choking?' },
-];
+interface IntakeSession {
+  step: 'idle' | 'awaiting_food' | 'awaiting_activity' | 'complete';
+  primarySymptom: string;
+  dietHistory: string;
+  activityHistory: string;
+}
+
+const STORAGE_KEY_CHAT = 'foodwise_ai_chat_history_v1';
+const STORAGE_KEY_INTAKE = 'foodwise_ai_intake_session_v1';
 
 export const HealthChatbot: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: 'assistant',
-      content: 'Hello! I am your Health & First Aid Assistant. Ask me about any symptom, first-aid situation, or food additive concern.',
-    },
-  ]);
+
+  // Load chat history from localStorage
+  const [messages, setMessages] = useState<Message[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_CHAT);
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error('Error loading chat history:', e);
+    }
+    return [
+      {
+        role: 'assistant',
+        content: 'Hello! I am your FoodWise Clinical Assistant. Describe any symptoms you are experiencing to begin your assessment.',
+      },
+    ];
+  });
+
+  // Track conversational diagnosis intake state
+  const [intake, setIntake] = useState<IntakeSession>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_INTAKE);
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error('Error loading intake session:', e);
+    }
+    return {
+      step: 'idle',
+      primarySymptom: '',
+      dietHistory: '',
+      activityHistory: '',
+    };
+  });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Save conversation and intake state on updates
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_CHAT, JSON.stringify(messages));
+    } catch (e) {
+      console.error('Error saving chat:', e);
+    }
+  }, [messages]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_INTAKE, JSON.stringify(intake));
+    } catch (e) {
+      console.error('Error saving intake:', e);
+    }
+  }, [intake]);
 
   useEffect(() => {
     if (isOpen) {
@@ -40,118 +87,176 @@ export const HealthChatbot: React.FC = () => {
     }
   }, [messages, isOpen]);
 
-  const generateLocalTriage = (query: string): string => {
-    const q = query.toLowerCase();
-
-    if (q.includes('numb') || q.includes('tingl') || q.includes('feet') || q.includes('foot') || q.includes('leg') || q.includes('pin and needle')) {
-      return `**Numbness / Tingling in Feet & Limbs:**
-
-1. **Check Circulation**: Loosen tight footwear, socks, or crossed legs to restore blood flow.
-2. **Shift Position**: Gently walk or wiggle toes for 2–3 minutes to stimulate nerve response.
-3. **Emergency Warning**: Seek immediate care if accompanied by sudden facial drooping, arm weakness, or difficulty speaking (signs of stroke).
-4. **Consult Physician**: Schedule a medical checkup if numbness is persistent, painful, or recurring daily (indicates neuropathy or lumbar nerve compression).`;
-    }
-
-    if (q.includes('headache') || q.includes('migraine') || q.includes('head hurt')) {
-      return `**Headache Relief Steps:**
-
-1. **Hydrate**: Drink 1–2 full glasses of clean water immediately.
-2. **Rest**: Lie down in a dark, quiet room with a cool damp cloth over your forehead.
-3. **Avoid Eyestrain**: Step away from digital screens and bright lighting.
-4. **Emergency Check**: Dial emergency if pain is sudden/explosive or paired with stiff neck and confusion.`;
-    }
-
-    if (q.includes('stomach') || q.includes('cramp') || q.includes('belly') || q.includes('digest')) {
-      return `**Stomach Pain & Cramp Protocol:**
-
-1. **Rest Digestive Tract**: Sip warm water or chamomile/ginger tea slowly; avoid solid meals.
-2. **Apply Heat**: Place a warm heating pad or hot water bottle over the abdomen.
-3. **Avoid Irritants**: Skip dairy, fried foods, caffeine, and NSAID painkillers like ibuprofen.
-4. **Seek Urgent Care**: If pain is severe on the lower-right side, radiating to the back, or accompanied by fever.`;
-    }
-
-    if (q.includes('burn') || q.includes('scald') || q.includes('oil')) {
-      return `**Kitchen Burn Care:**
-
-1. **Cool Water**: Run cool tap water over the burn for 10–15 minutes (never use ice).
-2. **Remove Jewelry**: Take off rings and watches before swelling begins.
-3. **Protect**: Cover loosely with a clean non-stick bandage.
-4. **No Ointments**: Do not apply butter, oil, or toothpaste.`;
-    }
-
-    if (q.includes('cut') || q.includes('bleed') || q.includes('wound') || q.includes('knife')) {
-      return `**Kitchen Cut / Bleeding:**
-
-1. **Direct Pressure**: Press firmly with clean cloth for 5 continuous minutes.
-2. **Elevate**: Keep the wound raised above heart level.
-3. **Cleanse**: Rinse with cool water and wash perimeter skin with soap.
-4. **Bandage**: Apply antiseptic and a sterile dressing.`;
-    }
-
-    if (q.includes('allergi') || q.includes('anaphylax') || q.includes('hive') || q.includes('swelling')) {
-      return `**Allergic Reaction / Anaphylaxis:**
-
-1. **Inject EpiPen**: Use auto-injector in outer mid-thigh immediately.
-2. **Call 911 / 112**: Request emergency medical help right away.
-3. **Lie Flat**: Elevate legs; sit upright only if breathing is difficult.
-4. **Avoid Oral Meds**: Do not give liquids or pills if swallowing is restricted.`;
-    }
-
-    if (q.includes('chok') || q.includes('airway') || q.includes('throat') || q.includes('heimlich')) {
-      return `**Choking First Aid:**
-
-1. **5 Back Blows**: Lean person forward and deliver firm heel-of-hand blows between shoulder blades.
-2. **5 Abdominal Thrusts**: Pull inward and upward above the navel (Heimlich).
-3. **Alternate**: Repeat 5 blows and 5 thrusts until the blockage clears.
-4. **If Unconscious**: Lower to the floor and start CPR compressions.`;
-    }
-
-    return `**Health Assessment for "${query}":**
-
-1. **Immediate Safety**: If you experience severe pain, breathing distress, or sudden weakness, call local emergency services immediately.
-2. **Rest & Monitor**: Sit or lie down in a safe, comfortable position and track any symptom changes.
-3. **Avoid Self-Medication**: Do not take unprescribed drugs until the underlying cause is identified.
-4. **Consult a Doctor**: Visit a licensed medical professional if this symptom persists or worsens over the next few hours.`;
+  const handleClearHistory = () => {
+    const initial: Message[] = [
+      {
+        role: 'assistant',
+        content: 'Conversation history cleared. What symptoms or medical queries can I assist you with?',
+      },
+    ];
+    setMessages(initial);
+    setIntake({
+      step: 'idle',
+      primarySymptom: '',
+      dietHistory: '',
+      activityHistory: '',
+    });
+    localStorage.removeItem(STORAGE_KEY_CHAT);
+    localStorage.removeItem(STORAGE_KEY_INTAKE);
   };
 
-  const handleSend = async (queryText?: string) => {
-    const textToSend = queryText || input;
-    if (!textToSend.trim() || loading) return;
+  const evaluateClinicalProfile = (symptom: string, food: string, activity: string): string => {
+    const s = symptom.toLowerCase();
+    const f = food.toLowerCase();
 
-    const userMessage: Message = { role: 'user', content: textToSend };
+    // 1. Allergic Reaction / Anaphylaxis
+    if (s.includes('allergi') || s.includes('hives') || s.includes('swelling') || s.includes('rash') || s.includes('itch') || f.includes('peanut') || f.includes('nut') || f.includes('seafood') || f.includes('shellfish') || f.includes('egg') || f.includes('milk')) {
+      return `**Clinical Assessment & Referral:**
+
+* **Suspected Condition**: Acute Allergic Reaction / Dietary Hypersensitivity
+* **Recommended Specialist**: **Allergist / Immunologist** (or Urgent Care Physician)
+
+**Immediate First-Aid Protocol:**
+1. **EpiPen**: Administer auto-injector into outer mid-thigh if breathing is restricted.
+2. **Call 911 / 112**: Seek immediate medical evaluation if throat tightness occurs.
+3. **Stop Ingestion**: Cease consuming recent foods (${food || 'suspected allergens'}).
+4. **Positioning**: Lie flat with legs elevated; do not give oral fluids if swallowing is difficult.`;
+    }
+
+    // 2. Peripheral Neuropathy / Nerve Compression / Circulation
+    if (s.includes('numb') || s.includes('tingl') || s.includes('pin and needle') || s.includes('feet') || s.includes('foot') || s.includes('leg') || s.includes('hand')) {
+      return `**Clinical Assessment & Referral:**
+
+* **Suspected Condition**: Peripheral Neuropathy / Transient Nerve Compression / Vascular Insufficiency
+* **Recommended Specialist**: **Neurologist** or **Vascular Specialist**
+
+**Immediate First-Aid Protocol:**
+1. **Restore Blood Flow**: Loosen tight footwear, socks, or uncross legs immediately.
+2. **Stimulate Nerves**: Elevate feet slightly and gently flex toes/ankles for 3 minutes.
+3. **Hydrate**: Drink a glass of water with electrolytes.
+4. **Emergency Check**: If numbness spreads to one side of the face or arm with slurred speech, call 911 / emergency services immediately.`;
+    }
+
+    // 3. Acute Gastroenteritis / Food Poisoning
+    if (s.includes('stomach') || s.includes('vomit') || s.includes('nausea') || s.includes('diarrhea') || s.includes('cramp') || s.includes('poison') || s.includes('belly')) {
+      return `**Clinical Assessment & Referral:**
+
+* **Suspected Condition**: Acute Gastroenteritis / Foodborne Pathogen Ingestion
+* **Recommended Specialist**: **Gastroenterologist** or **General Physician**
+
+**Immediate First-Aid Protocol:**
+1. **Oral Rehydration**: Sip small amounts of oral rehydration salts (ORS) or electrolyte water.
+2. **Gut Rest**: Avoid solid foods and dairy for the next 4–6 hours.
+3. **Withhold Antidiarrheals**: Allow the gastrointestinal tract to expel toxins unless directed by a doctor.
+4. **Seek Immediate Care**: If high fever (>102°F / 38.8°C), blood in stool, or inability to keep fluids down persists.`;
+    }
+
+    // 4. Migraine / Tension Headache
+    if (s.includes('headache') || s.includes('head') || s.includes('migraine') || s.includes('dizzi')) {
+      return `**Clinical Assessment & Referral:**
+
+* **Suspected Condition**: Tension Headache / Migraine / Dehydration
+* **Recommended Specialist**: **Neurologist** or **General Physician**
+
+**Immediate First-Aid Protocol:**
+1. **Rapid Hydration**: Drink 500ml of cool water.
+2. **Sensory Rest**: Lie down in a dark, quiet room with a cold compress on your forehead.
+3. **Limit Screen Exposure**: Discontinue mobile and monitor use.
+4. **Seek Urgent Care**: If the headache is sudden and explosive, or accompanied by neck stiffness and confusion.`;
+    }
+
+    // 5. General Clinical Assessment
+    return `**Clinical Assessment & Referral:**
+
+* **Suspected Condition**: Undifferentiated Systemic / Metabolic Symptom
+* **Recommended Specialist**: **Internal Medicine Specialist (General Physician)**
+
+**Immediate First-Aid Protocol:**
+1. **Rest & Vital Check**: Sit in a supportive chair or lie down in a well-ventilated area.
+2. **Hydrate**: Sip room-temperature water slowly.
+3. **Record Timeline**: Log when symptoms started relative to food (${food}) and activity (${activity}).
+4. **Consult Clinic**: Visit a primary care clinic for physical and metabolic screening.`;
+  };
+
+  const handleSend = () => {
+    if (!input.trim() || loading) return;
+
+    const userText = input.trim();
+    const userMessage: Message = { role: 'user', content: userText };
     setMessages((prev) => [...prev, userMessage]);
-    if (!queryText) setInput('');
+    setInput('');
     setLoading(true);
 
-    try {
-      // First attempt: Fast, free AI API for dynamic medical triage
-      const response = await fetch(
-        `https://text.pollinations.ai/${encodeURIComponent(
-          `You are FoodWise Health & First Aid AI. 
-Provide a clear, brief, clinical response for the query. 
-Use a bold title and maximum 4 numbered action steps. Keep it under 60 words total.
-Always advise emergency care if life-threatening.
-Query: ${textToSend}`
-        )}`,
-        { signal: AbortSignal.timeout(3500) }
-      );
-
-      if (response.ok) {
-        const text = await response.text();
-        if (text && text.trim().length > 10) {
-          setMessages((prev) => [...prev, { role: 'assistant', content: text.trim() }]);
-          setLoading(false);
-          return;
-        }
+    setTimeout(() => {
+      // Step 0: Conversational Closures & Greetings
+      if (/(thank|thanks|ok|okay|cool|bye|goodbye|all good|fine now)/i.test(userText.toLowerCase()) && userText.split(' ').length <= 4) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: "You're welcome! Stay safe, and describe any new symptoms whenever you need medical triage.",
+          },
+        ]);
+        setIntake({ step: 'idle', primarySymptom: '', dietHistory: '', activityHistory: '' });
+        setLoading(false);
+        return;
       }
-      throw new Error('Fallback to local engine');
-    } catch {
-      // Instant contextual fallback engine
-      const localReply = generateLocalTriage(textToSend);
-      setMessages((prev) => [...prev, { role: 'assistant', content: localReply }]);
-    } finally {
-      setLoading(false);
-    }
+
+      // Step 1: Initial Symptom Reporting -> Ask Food Intake
+      if (intake.step === 'idle' || intake.step === 'complete') {
+        setIntake({
+          step: 'awaiting_food',
+          primarySymptom: userText,
+          dietHistory: '',
+          activityHistory: '',
+        });
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: `I have noted your symptom: **"${userText}"**.\n\nTo determine the exact cause and doctor referral:\n1. **What specific foods, snacks, or beverages have you consumed in the last 4–6 hours?**`,
+          },
+        ]);
+        setLoading(false);
+        return;
+      }
+
+      // Step 2: Food Received -> Ask Physical Activity & Environment
+      if (intake.step === 'awaiting_food') {
+        setIntake((prev) => ({
+          ...prev,
+          step: 'awaiting_activity',
+          dietHistory: userText,
+        }));
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: `Got it. Food intake noted as: *${userText}*.\n\n2. **What physical activities, exertion, or posture have you been engaged in recently** (e.g., sitting for long hours, exercise, heat exposure, kitchen cooking)?`,
+          },
+        ]);
+        setLoading(false);
+        return;
+      }
+
+      // Step 3: Activity Received -> Generate Complete Clinical Diagnosis & Referral
+      if (intake.step === 'awaiting_activity') {
+        const finalDiet = intake.dietHistory;
+        const finalActivity = userText;
+        const finalSymptom = intake.primarySymptom;
+
+        setIntake((prev) => ({
+          ...prev,
+          step: 'complete',
+          activityHistory: userText,
+        }));
+
+        const prescription = evaluateClinicalProfile(finalSymptom, finalDiet, finalActivity);
+        setMessages((prev) => [...prev, { role: 'assistant', content: prescription }]);
+        setLoading(false);
+        return;
+      }
+    }, 400);
   };
 
   return (
@@ -162,52 +267,47 @@ Query: ${textToSend}`
         aria-label="Open Health Assistant"
       >
         <Bot className="w-5 h-5" />
-        <span className="text-xs font-extrabold hidden sm:inline">Health & First Aid</span>
+        <span className="text-xs font-extrabold hidden sm:inline">Health AI Triage</span>
       </button>
 
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="w-full max-w-lg h-[90vh] sm:h-[580px] bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl flex flex-col shadow-2xl overflow-hidden">
+          <div className="w-full max-w-lg h-[90vh] sm:h-[600px] bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl flex flex-col shadow-2xl overflow-hidden">
             
+            {/* Modal Header */}
             <div className="p-4 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                  <HeartPulse className="w-5 h-5" />
+                  <Stethoscope className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="text-sm font-extrabold text-white flex items-center gap-1.5">
-                    Health & First Aid AI
+                    FoodWise Clinical Assistant
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 flex items-center gap-1">
-                      <ShieldCheck className="w-3 h-3" /> Online
+                      <ShieldCheck className="w-3 h-3" /> Active Intake
                     </span>
                   </h3>
-                  <p className="text-[11px] text-slate-400">Instant triage for symptoms, burns, cuts & allergies</p>
+                  <p className="text-[11px] text-slate-400">Multi-turn symptom triage & specialist matching</p>
                 </div>
               </div>
-              <button
-                onClick={() => setIsOpen(false)}
-                className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={handleClearHistory}
+                  title="Reset conversation"
+                  className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-rose-400 hover:bg-slate-700 transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setIsOpen(false)}
+                  className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
-            <div className="px-4 py-2 bg-slate-950/40 border-b border-slate-800 flex gap-2 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-              {QUICK_PROMPTS.map((item, idx) => {
-                const Icon = item.icon;
-                return (
-                  <button
-                    key={idx}
-                    onClick={() => handleSend(item.query)}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-800 border border-slate-700/50 text-[11px] font-semibold text-slate-300 hover:text-white whitespace-nowrap transition-all flex-shrink-0 cursor-pointer"
-                  >
-                    <Icon className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>{item.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-
+            {/* Chat Message Scrollport */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.map((msg, index) => (
                 <div
@@ -218,7 +318,7 @@ Query: ${textToSend}`
                     className={`max-w-[88%] rounded-2xl px-4 py-3 text-xs leading-relaxed ${
                       msg.role === 'user'
                         ? 'bg-emerald-500 text-slate-950 font-medium rounded-br-none'
-                        : 'bg-slate-800/80 text-slate-200 border border-slate-700/50 rounded-bl-none'
+                        : 'bg-slate-800/90 text-slate-100 border border-slate-700/60 rounded-bl-none shadow-md'
                     }`}
                   >
                     <div className="whitespace-pre-wrap">{msg.content}</div>
@@ -229,13 +329,14 @@ Query: ${textToSend}`
                 <div className="flex justify-start">
                   <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl rounded-bl-none px-4 py-3 flex items-center gap-2 text-xs text-slate-400">
                     <HeartPulse className="w-3.5 h-3.5 animate-pulse text-emerald-400" />
-                    <span>Analyzing clinical steps...</span>
+                    <span>Processing clinical assessment...</span>
                   </div>
                 </div>
               )}
               <div ref={messagesEndRef} />
             </div>
 
+            {/* User Input Field */}
             <div className="p-3 bg-slate-950 border-t border-slate-800">
               <form
                 onSubmit={(e) => {
@@ -248,20 +349,26 @@ Query: ${textToSend}`
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="Describe your symptom (e.g. feet numb, headache, burns)..."
-                  className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50"
+                  placeholder={
+                    intake.step === 'awaiting_food'
+                      ? 'List foods/drinks consumed recently...'
+                      : intake.step === 'awaiting_activity'
+                      ? 'Describe your recent activity or posture...'
+                      : 'Describe your symptom (e.g. feet numb, rash, cramps)...'
+                  }
+                  className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/60"
                 />
                 <button
                   type="submit"
                   disabled={loading || !input.trim()}
-                  className="p-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 rounded-xl transition-all cursor-pointer"
+                  className="p-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 rounded-xl transition-all cursor-pointer font-bold"
                 >
                   <Send className="w-4 h-4" />
                 </button>
               </form>
               <div className="flex items-center justify-center gap-1.5 mt-2 text-[10px] text-slate-500">
                 <PhoneCall className="w-3 h-3 text-amber-500" />
-                <span>For acute life-threatening symptoms, dial 911 / 112 immediately.</span>
+                <span>Emergency: For severe breathing difficulty, chest pain, or trauma, dial 911 / 112 immediately.</span>
               </div>
             </div>
 
