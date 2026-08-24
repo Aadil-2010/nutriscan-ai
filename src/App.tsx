@@ -11,6 +11,7 @@ import { AuthScreen } from './components/AuthScreen';
 import { CameraModal } from './components/CameraModal';
 import { AdditiveDetailModal } from './components/AdditiveDetailModal';
 import { PreferencesModal } from './components/PreferencesModal';
+import { PatientSignInModal } from './components/PatientSignInModal';
 import { HealthChatbot } from './components/HealthChatbot';
 import { 
   NutriScanResult, 
@@ -54,6 +55,7 @@ export default function App() {
   const [cameraMode, setCameraMode] = useState<'label' | 'barcode'>('barcode');
   const [selectedAdditiveModal, setSelectedAdditiveModal] = useState<AdditiveItem | null>(null);
   const [isPrefsOpen, setIsPrefsOpen] = useState<boolean>(false);
+  const [isPatientAuthOpen, setIsPatientAuthOpen] = useState<boolean>(false);
   const [showEthicalBoard, setShowEthicalBoard] = useState<boolean>(false);
 
   // User health preferences state
@@ -255,14 +257,25 @@ export default function App() {
             <span>Personalised Food Suitability & Allergen Screening Standard</span>
           </div>
           
-          <button 
-            type="button"
-            onClick={() => setShowEthicalBoard(!showEthicalBoard)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg shadow-sm transition-all hover:border-emerald-500/60 active:scale-95 cursor-pointer flex-shrink-0"
-          >
-            <span>📋</span>
-            <span>{showEthicalBoard ? 'Hide Exhibition Board Rules' : 'View Ethical & Safety Framework'}</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              type="button"
+              onClick={() => setIsPatientAuthOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg shadow-sm transition-all cursor-pointer"
+            >
+              <span>👤</span>
+              <span>Patient Profile</span>
+            </button>
+
+            <button 
+              type="button"
+              onClick={() => setShowEthicalBoard(!showEthicalBoard)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg shadow-sm transition-all hover:border-emerald-500/60 active:scale-95 cursor-pointer flex-shrink-0"
+            >
+              <span>📋</span>
+              <span>{showEthicalBoard ? 'Hide Exhibition Board Rules' : 'View Ethical & Safety Framework'}</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -404,6 +417,21 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* Patient Sign-In Modal */}
+      <PatientSignInModal
+        isOpen={isPatientAuthOpen}
+        onClose={() => setIsPatientAuthOpen(false)}
+        onSuccess={(patient) => {
+          if (userProfile) {
+            setUserProfile({
+              ...userProfile,
+              name: patient.name || userProfile.name,
+              email: patient.email || userProfile.email,
+            });
+          }
+        }}
+      />
 
       {/* Health & First Aid Floating Chatbot */}
       <HealthChatbot />
