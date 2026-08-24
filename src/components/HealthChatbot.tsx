@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { GoogleGenAI } from '@google/genai';
 import { 
   Bot, 
   Send, 
@@ -15,7 +16,20 @@ interface Message {
   content: string;
 }
 
-const STORAGE_KEY_CHAT = 'foodwise_ai_chat_history_v2';
+const STORAGE_KEY_CHAT = 'foodwise_ai_chat_history_v3';
+
+const SYSTEM_INSTRUCTION = `You are FoodWise Clinical Assistant, an expert medical triage AI.
+
+DIAGNOSTIC PROTOCOL:
+1. Prioritize the primary physical complaint (e.g., swollen hand, hives, headache, wound) rather than minor dietary details.
+2. If the user only gave an initial vague symptom without context:
+   - Ask clarifying questions about food consumed in the last 4-6 hours and recent physical activities/trauma.
+3. Once sufficient context is known:
+   - Provide the **Suspected Condition**
+   - Provide the **Recommended Doctor Specialist** (e.g., Allergist, Orthopedist, Neurologist, General Physician)
+   - Provide the **Immediate First-Aid Protocol** with 3-4 clear, numbered steps.
+4. If the user asks a follow-up (e.g., "should I see a dermatologist?"), answer directly based on previous findings without resetting the intake.
+Keep replies direct, clinical, structured with Markdown bolding, and under 90 words.`;
 
 export const HealthChatbot: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -53,6 +67,61 @@ export const HealthChatbot: React.FC = () => {
     localStorage.removeItem(STORAGE_KEY_CHAT);
   };
 
+  const generateAIResponse = async (chatHistory: Message[]): Promise<string> => {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
+
+    // Primary: Google GenAI Client
+    if (apiKey) {
+      try {
+        const ai = new GoogleGenAI({ apiKey });
+        const contents = chatHistory.map((m) => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }],
+        }));
+
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents,
+          config: { systemInstruction: SYSTEM_INSTRUCTION },
+        });
+
+        if (response && response.text) {
+          return response.text.trim();
+        }
+      } catch (err) {
+        console.warn('Direct Gemini call failed, attempting high-speed router...', err);
+      }
+    }
+
+    // Secondary: Direct Serverless Router
+    const promptHistory = [
+      { role: 'system', content: SYSTEM_INSTRUCTION },
+      ...chatHistory.map((m) => ({
+        role: m.role === 'assistant' ? 'assistant' : 'user',
+        content: m.content,
+      })),
+    ];
+
+    const fallbackRes = await fetch('https://text.pollinations.ai/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: promptHistory,
+        model: 'openai',
+        temperature: 0.2,
+      }),
+    });
+
+    if (fallbackRes.ok) {
+      const text = await fallbackRes.text();
+      if (text && text.trim().length > 10) {
+        return text.trim();
+      }
+    }
+
+    throw new Error('All AI services are currently unresponsive.');
+  };
+
   const handleSend = async () => {
     if (!input.trim() || loading) return;
 
@@ -63,26 +132,15 @@ export const HealthChatbot: React.FC = () => {
     setLoading(true);
 
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: updatedHistory }),
-      });
-
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || `Error ${response.status}`);
-      }
-
-      const data = await response.json();
-      setMessages([...updatedHistory, { role: 'assistant', content: data.reply.trim() }]);
+      const aiReply = await generateAIResponse(updatedHistory);
+      setMessages([...updatedHistory, { role: 'assistant', content: aiReply }]);
     } catch (err: any) {
-      console.error('Health Chat Error:', err);
+      console.error('Chat AI Error:', err);
       setMessages([
         ...updatedHistory,
         {
           role: 'assistant',
-          content: `Unable to complete AI evaluation (${err.message}). Please re-send or visit urgent care if symptoms worsen.`,
+          content: `Unable to complete AI evaluation. Please verify your connection or visit urgent care if symptoms worsen.`,
         },
       ]);
     } finally {
@@ -113,10 +171,10 @@ export const HealthChatbot: React.FC = () => {
                   <h3 className="text-sm font-extrabold text-white flex items-center gap-1.5">
                     FoodWise Clinical AI
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 flex items-center gap-1">
-                      <ShieldCheck className="w-3 h-3" /> Live
+                      <ShieldCheck className="w-3 h-3" /> Online
                     </span>
                   </h3>
-                  <p className="text-[11px] text-slate-400">Symptom evaluation, doctor matching & first-aid triage</p>
+                  <p className="text-[11px] text-slate-400">Symptom evaluation, doctor matching & first aid</p>
                 </div>
               </div>
               <div className="flex items-center gap-1.5">
