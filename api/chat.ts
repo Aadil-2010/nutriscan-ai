@@ -1,4 +1,10 @@
+import { GoogleGenAI } from '@google/genai';
+
 export default async function handler(req: any, res: any) {
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -9,78 +15,66 @@ export default async function handler(req: any, res: any) {
     return res.status(400).json({ error: 'Invalid messages array' });
   }
 
-  const systemInstruction = `You are FoodWise Clinical Assistant, an expert medical triage AI.
-
-CORE CLINICAL RULES:
-1. ALWAYS prioritize the primary physical symptom reported (e.g., swollen hand, hives, headache, breathing difficulty) over incidental details like snacks or foods eaten.
-2. Maintain full conversational context. If a user reported a swollen hand and later mentions eating chips, evaluate whether the hand swelling is an allergic reaction (angioedema), insect bite, injury, or fluid retention—DO NOT blindly diagnose stomach issues just because food was mentioned.
-3. OUTPUT FORMAT:
-   - **Suspected Condition**: State the primary condition matching the physical symptom.
-   - **Recommended Doctor Specialist**: State the exact specialist (e.g., Allergist, Orthopedist, Neurologist, Dermatologist, ER).
-   - **Immediate First-Aid Protocol**: Provide 3-4 numbered, actionable immediate steps specific to the real physical complaint.
-4. Keep the output clean, structured, and clinically sound.`;
-
-  // 1. Primary AI Tier: Gemini API (if key available)
   const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
-  if (apiKey) {
-    try {
-      const formattedContents = messages.map((m: any) => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content || '' }],
-      }));
 
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-      const geminiResp = await fetch(geminiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: systemInstruction }] },
-          contents: formattedContents,
-          generationConfig: { temperature: 0.2, maxOutputTokens: 400 },
-        }),
-      });
-
-      if (geminiResp.ok) {
-        const data = await geminiResp.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) {
-          return res.status(200).json({ reply: text.trim() });
-        }
-      }
-    } catch (e) {
-      console.warn('Gemini endpoint error, falling back to router...');
-    }
+  if (!apiKey) {
+    return res.status(500).json({ 
+      error: 'GEMINI_API_KEY is not configured in environment variables.' 
+    });
   }
 
-  // 2. High-Availability Zero-Key AI Router
-  try {
-    const chatPayload = [
-      { role: 'system', content: systemInstruction },
-      ...messages.map((m: any) => ({
-        role: m.role === 'assistant' ? 'assistant' : 'user',
-        content: m.content || '',
-      })),
-    ];
+  const systemInstruction = `You are FoodWise Clinical AI, an expert, empathetic medical triage and first-aid assistant.
 
-    const aiResp = await fetch('https://text.pollinations.ai/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messages: chatPayload,
-        model: 'openai',
-        temperature: 0.2,
-      }),
+INSTRUCTIONS:
+1. If the user gives a casual greeting (like "hi", "hello", "hey"), greet them warmly and ask how you can assist with their symptoms, food questions, or first-aid needs.
+2. If the user presents a physical symptom (e.g. swelling, numbness, rash, burns, pain):
+   - **Suspected Condition**: List 2-3 most probable clinical possibilities based on the symptoms or image.
+   - **Recommended Specialist**: Name the specific doctor specialist to consult.
+   - **Immediate First-Aid Protocol**: Provide 3-4 clear, actionable numbered steps.
+   - **Emergency Red Flags**: Point out red flags requiring immediate 911 / ER attention.
+3. If an image is attached, describe what you visually observe (e.g., localized erythema, swelling, hives, lesion).
+4. For follow-up questions, answer naturally in continuous context.
+Keep replies clear, concise, and formatted in clean Markdown.`;
+
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+
+    const contents = messages.map((m: any) => {
+      const parts: any[] = [{ text: m.content || '' }];
+
+      if (m.image && typeof m.image === 'string' && m.image.includes(',')) {
+        const mimeType = m.image.split(';')[0].replace('data:', '') || 'image/jpeg';
+        const base64Data = m.image.split(',')[1];
+        parts.push({
+          inlineData: {
+            mimeType,
+            data: base64Data,
+          },
+        });
+      }
+
+      return {
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts,
+      };
     });
 
-    if (aiResp.ok) {
-      const text = await aiResp.text();
-      if (text && text.trim().length > 10) {
-        return res.status(200).json({ reply: text.trim() });
-      }
-    }
-  } catch (err: any) {
-    console.error('All AI endpoints failed:', err);
-  }
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents,
+      config: {
+        systemInstruction,
+        temperature: 0.3,
+        maxOutputTokens: 600,
+      },
+    });
 
-  return res.status(500).json({ error: 'Clinical AI service temporarily busy. Please try sending again in a moment.' });
+    const reply = response.text || '';
+    return res.status(200).json({ reply: reply.trim() });
+  } catch (err: any) {
+    console.error('Chat AI Error in api/chat.ts:', err);
+    return res.status(500).json({ 
+      error: err.message || 'Failed to generate AI clinical response.' 
+    });
+  }
 }

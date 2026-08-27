@@ -18,21 +18,7 @@ interface Message {
   image?: string;
 }
 
-const STORAGE_KEY_CHAT = 'foodwise_ai_chat_history_v7';
-
-const SYSTEM_INSTRUCTION = `You are FoodWise Clinical AI, an empathetic, highly knowledgeable medical triage assistant.
-
-CRITICAL INSTRUCTIONS:
-1. Provide a completely dynamic, nuanced clinical evaluation based on everything the user says or shows in photos. Never respond with canned, repetitive scripts.
-2. If the user presents a physical symptom (swelling, numbness, burning, rash, sharp pain, trauma), immediately address that physical issue.
-3. If an image is provided, examine it visually and reference what you observe (e.g., color, borders, swelling severity, skin texture).
-4. Output format:
-   - **Suspected Condition**: Give 2-3 most probable clinical possibilities.
-   - **Recommended Specialist**: Name the exact doctor specialist to consult.
-   - **Immediate First-Aid Protocol**: Provide 3-4 clear, actionable numbered steps tailored strictly to their exact situation.
-   - **Emergency Red Flags**: State any warning signs requiring immediate 911 / ER attention.
-5. If the user asks a natural follow-up question or conversational remark, answer naturally in continuous context without restarting the questionnaire.
-Keep your response concise, clear, and structured with Markdown.`;
+const STORAGE_KEY_CHAT = 'foodwise_ai_chat_history_v8';
 
 export const HealthChatbot: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -83,88 +69,6 @@ export const HealthChatbot: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
-  const callLiveAI = async (chatHistory: Message[]): Promise<string> => {
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
-
-    // Convert messages into Gemini REST API format
-    const contents = chatHistory.map((m) => {
-      const parts: any[] = [{ text: m.content || '' }];
-
-      if (m.image && m.image.includes(',')) {
-        const mimeType = m.image.split(';')[0].replace('data:', '');
-        const base64Data = m.image.split(',')[1];
-        parts.push({
-          inline_data: {
-            mime_type: mimeType || 'image/jpeg',
-            data: base64Data,
-          },
-        });
-      }
-
-      return {
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts,
-      };
-    });
-
-    // Primary: Direct Gemini 2.5 Flash REST API
-    if (apiKey) {
-      try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-        const resp = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            system_instruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
-            contents,
-            generationConfig: {
-              temperature: 0.3,
-              maxOutputTokens: 500,
-            },
-          }),
-        });
-
-        if (resp.ok) {
-          const data = await resp.json();
-          const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (reply && reply.trim().length > 0) {
-            return reply.trim();
-          }
-        }
-      } catch (err) {
-        console.warn('Direct Gemini call failed, routing to serverless fallback...', err);
-      }
-    }
-
-    // Secondary: Serverless Multi-Turn AI Stream (Zero-Key LLM Router)
-    const openAiPayload = [
-      { role: 'system', content: SYSTEM_INSTRUCTION },
-      ...chatHistory.map((m) => ({
-        role: m.role === 'assistant' ? 'assistant' : 'user',
-        content: m.content,
-      })),
-    ];
-
-    const routerResp = await fetch('https://text.pollinations.ai/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messages: openAiPayload,
-        model: 'openai',
-        temperature: 0.3,
-      }),
-    });
-
-    if (routerResp.ok) {
-      const text = await routerResp.text();
-      if (text && text.trim().length > 10) {
-        return text.trim();
-      }
-    }
-
-    throw new Error('AI service unreachable. Please verify your connection.');
-  };
-
   const handleSend = async () => {
     if ((!input.trim() && !selectedImage) || loading) return;
 
@@ -182,14 +86,28 @@ export const HealthChatbot: React.FC = () => {
     setLoading(true);
 
     try {
-      const aiReply = await callLiveAI(updatedHistory);
-      setMessages([...updatedHistory, { role: 'assistant', content: aiReply }]);
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ messages: updatedHistory }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `Server responded with status ${response.status}`);
+      }
+
+      const data = await response.json();
+      setMessages([...updatedHistory, { role: 'assistant', content: data.reply.trim() }]);
     } catch (err: any) {
+      console.error('Chat error:', err);
       setMessages([
         ...updatedHistory,
         {
           role: 'assistant',
-          content: `⚠️ ${err.message || 'Unable to complete AI evaluation. Please try sending again in a moment.'}`,
+          content: `⚠️ ${err.message || 'Unable to complete AI evaluation. Please verify your connection or try again.'}`,
         },
       ]);
     } finally {
@@ -221,10 +139,10 @@ export const HealthChatbot: React.FC = () => {
                   <h3 className="text-sm font-extrabold text-white flex items-center gap-1.5">
                     FoodWise Clinical AI
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 flex items-center gap-1">
-                      <ShieldCheck className="w-3 h-3" /> Live LLM
+                      <ShieldCheck className="w-3 h-3" /> Live
                     </span>
                   </h3>
-                  <p className="text-[11px] text-slate-400">Multimodal vision triage, doctor referrals & first aid</p>
+                  <p className="text-[11px] text-slate-400">Symptom evaluation, photo triage & first aid</p>
                 </div>
               </div>
               <div className="flex items-center gap-1.5">
@@ -250,7 +168,7 @@ export const HealthChatbot: React.FC = () => {
                 <div className="text-center py-12 px-4 space-y-3 text-slate-500">
                   <HeartPulse className="w-10 h-10 text-emerald-500/40 mx-auto" />
                   <p className="text-xs text-slate-300 font-medium">
-                    Ask any question, describe symptoms, or attach photos of a rash, wound, or swelling for live AI evaluation.
+                    Say hello, describe any symptoms, or upload a photo of a rash or swelling for live AI evaluation.
                   </p>
                 </div>
               )}
@@ -283,7 +201,7 @@ export const HealthChatbot: React.FC = () => {
                 <div className="flex justify-start">
                   <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl rounded-bl-none px-4 py-3 flex items-center gap-2 text-xs text-slate-400">
                     <HeartPulse className="w-3.5 h-3.5 animate-pulse text-emerald-400" />
-                    <span>Analyzing clinical scenario & generating dynamic response...</span>
+                    <span>Analyzing clinical scenario...</span>
                   </div>
                 </div>
               )}
