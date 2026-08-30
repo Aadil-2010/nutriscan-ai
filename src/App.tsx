@@ -12,6 +12,7 @@ import { CameraModal } from './components/CameraModal';
 import { AdditiveDetailModal } from './components/AdditiveDetailModal';
 import { PreferencesModal } from './components/PreferencesModal';
 import { HealthChatbot } from './components/HealthChatbot';
+import { GoogleGenAI } from '@google/genai';
 import { 
   NutriScanResult, 
   AdditiveItem, 
@@ -137,41 +138,116 @@ export default function App() {
     setErrorMsg(null);
 
     try {
-      const response = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
+      if (!apiKey) {
+        throw new Error('VITE_GEMINI_API_KEY is not configured in your environment or .env file.');
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
+
+      const activeReportsContext = userProfile?.medicalReports
+        ? userProfile.medicalReports.map((r, i) => `Report ${i + 1} (${r.title}): ${r.reportText}`).join('; ')
+        : 'None recorded';
+
+      const userSensitivitiesContext = Array.isArray(userProfile?.symptoms)
+        ? userProfile.symptoms.join(', ')
+        : (userProfile?.symptoms || 'None specified');
+
+      const systemPrompt = `
+You are FoodWise AI, an expert food additive toxicologist, clinical nutritionist, and regulatory food safety assessor (EFSA, US FDA, FSSAI India).
+
+Analyze the submitted food product, ingredients list, barcode, or package photo against the user's health profile:
+- Patient Active Symptoms & Allergies: ${userSensitivitiesContext}
+- Patient Medical Reports / Lab Diagnostics: ${activeReportsContext}
+- Active Preference Flags: ${JSON.stringify(userPreferences)}
+
+Tasks:
+1. Extract and standardize all ingredients and chemical additives (INS / E-numbers).
+2. Classify safety (Safe, Caution, Avoid) with toxicological rationale (NOAEL, ADI limits, gut microbiota impact, hyperactivity risks).
+3. Detect direct allergens or cross-contamination warnings.
+4. Calculate a personalized food suitability score (0 to 100).
+
+Respond ONLY with a valid JSON object matching this schema:
+{
+  "product_name": "Product Name",
+  "suitability_score": 85,
+  "suitability_level": "Safe",
+  "summary": "Concise 2-3 sentence clinical overview",
+  "allergen_alert": {
+    "detected": false,
+    "allergen_name": "",
+    "warning_type": "Direct Ingredient / Cross-Contamination",
+    "message": ""
+  },
+  "additives": [
+    {
+      "code": "INS 621 / E621",
+      "name": "Monosodium Glutamate",
+      "functional_class": "Flavor Enhancer",
+      "safety_rating": "Caution",
+      "description": "Short explanation of health impact.",
+      "adi_limit": "30 mg/kg bw/day",
+      "regulatory_status": "Approved by FSSAI, FDA, EFSA"
+    }
+  ],
+  "dietary_flags": ["Preservatives Flagged", "Moderate Sodium"],
+  "health_guidelines": ["Clinical recommendation 1", "Recommendation 2"]
+}
+`;
+
+      const parts: any[] = [];
+      if (selectedImage) {
+        const cleanBase64 = selectedImage.includes(',') ? selectedImage.split(',')[1] : selectedImage;
+        const mimeType = selectedImage.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
+        parts.push({
+          inlineData: {
+            data: cleanBase64,
+            mimeType,
+          },
+        });
+      }
+
+      const textPayload = `
+Product Name / Brand: ${productNameInput || 'Unspecified'}
+Barcode: ${barcodeInput || 'Unspecified'}
+Ingredient Text Provided: ${ingredientInput || 'Extract from uploaded image'}
+`;
+      parts.push({ text: textPayload });
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.6-flash',
+        contents: [
+          {
+            role: 'user',
+            parts,
+          },
+        ],
+        config: {
+          systemInstruction: systemPrompt,
+          responseMimeType: 'application/json',
+          temperature: 0.2,
         },
-        body: JSON.stringify({
-          productName: productNameInput,
-          ingredients: ingredientInput,
-          barcodeInput: barcodeInput,
-          image: selectedImage,
-          userPreferences,
-          healthProfile: userProfile ? {
-            symptoms: userProfile.symptoms,
-            medicalReportAnalysis: userProfile.medicalReportAnalysis,
-          } : undefined,
-        }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Server responded with status ${response.status}`);
-      }
+      const rawText = response.text || '{}';
+      const sanitizedText = rawText.replace(/```json\n?|```/g, '').trim();
+      const parsedData = JSON.parse(sanitizedText);
 
-      const data: NutriScanResult = await response.json();
-      data.id = `scan-${Date.now()}`;
-      data.timestamp = new Date().toISOString();
-      data.raw_ingredients_text = ingredientInput || productNameInput || barcodeInput;
-      if (selectedImage) {
-        data.image_preview = selectedImage;
-      }
+      const completeResult: NutriScanResult = {
+        ...parsedData,
+        id: `scan-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        raw_ingredients_text: ingredientInput || productNameInput || barcodeInput || 'Image Scan',
+        image_preview: selectedImage || undefined,
+        additives: Array.isArray(parsedData.additives) ? parsedData.additives : [],
+        dietary_flags: Array.isArray(parsedData.dietary_flags) ? parsedData.dietary_flags : [],
+        health_guidelines: Array.isArray(parsedData.health_guidelines) ? parsedData.health_guidelines : [],
+      };
 
-      setAnalysisResult(data);
+      setAnalysisResult(completeResult);
     } catch (err: any) {
       console.error('Analysis error:', err);
-      setErrorMsg(err.message || 'Failed to complete NutriScan AI analysis. Please check network connection or try again.');
+      setErrorMsg(err.message || 'Failed to complete FoodWise AI analysis. Please check your connection or try again.');
     } finally {
       setIsLoading(false);
     }
