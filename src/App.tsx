@@ -161,37 +161,40 @@ Analyze the submitted food product, ingredients list, barcode, or package photo 
 - Patient Medical Reports / Lab Diagnostics: ${activeReportsContext}
 - Active Preference Flags: ${JSON.stringify(userPreferences)}
 
-Tasks:
-1. Extract and standardize all ingredients and chemical additives (INS / E-numbers).
-2. Classify safety (Safe, Caution, Avoid) with toxicological rationale (NOAEL, ADI limits, gut microbiota impact, hyperactivity risks).
-3. Detect direct allergens or cross-contamination warnings.
-4. Calculate a personalized food suitability score (0 to 100).
-
-Respond ONLY with a valid JSON object matching this schema:
+Return ONLY valid JSON matching this schema:
 {
-  "product_name": "Product Name",
-  "suitability_score": 85,
-  "suitability_level": "Safe",
-  "summary": "Concise 2-3 sentence clinical overview",
-  "allergen_alert": {
-    "detected": false,
-    "allergen_name": "",
-    "warning_type": "Direct Ingredient / Cross-Contamination",
-    "message": ""
+  "scan_data": {
+    "detected_product_name": "Product Name",
+    "brand_name": "Brand Name or Unknown",
+    "barcode_detected": false,
+    "barcode_number": "",
+    "openfoodfacts_matched": false
   },
-  "additives": [
+  "product_info": {
+    "total_additives_found": 1
+  },
+  "overall_analysis": {
+    "health_summary": "Comprehensive clinical evaluation of product ingredients.",
+    "key_warnings": ["Warning 1", "Warning 2"],
+    "toxicological_note": "ADI / NOAEL safety guidance note."
+  },
+  "additives_detected": [
     {
-      "code": "INS 621 / E621",
+      "ins_e_number": "INS 621 / E621",
       "name": "Monosodium Glutamate",
       "functional_class": "Flavor Enhancer",
       "safety_rating": "Caution",
+      "biological_mechanism": "Glutamate receptor activation",
       "description": "Short explanation of health impact.",
-      "adi_limit": "30 mg/kg bw/day",
       "regulatory_status": "Approved by FSSAI, FDA, EFSA"
     }
   ],
-  "dietary_flags": ["Preservatives Flagged", "Moderate Sodium"],
-  "health_guidelines": ["Clinical recommendation 1", "Recommendation 2"]
+  "allergen_alert": {
+    "detected": false,
+    "allergen_name": "",
+    "warning_type": "",
+    "message": ""
+  }
 }
 `;
 
@@ -231,17 +234,46 @@ Ingredient Text Provided: ${ingredientInput || 'Extract from uploaded image'}
 
       const rawText = response.text || '{}';
       const sanitizedText = rawText.replace(/```json\n?|```/g, '').trim();
-      const parsedData = JSON.parse(sanitizedText);
+      let parsedData: any = {};
+      try {
+        parsedData = JSON.parse(sanitizedText);
+      } catch (jsonErr) {
+        console.error('Failed to parse Gemini JSON:', rawText);
+        throw new Error('Received unexpected format from AI. Please try again.');
+      }
 
+      // Safe normalization ensures all properties needed by AnalysisResults.tsx are guaranteed to exist
       const completeResult: NutriScanResult = {
         ...parsedData,
         id: `scan-${Date.now()}`,
         timestamp: new Date().toISOString(),
+        product_name: parsedData.scan_data?.detected_product_name || productNameInput || 'Scanned Food Product',
+        scan_data: {
+          detected_product_name: parsedData.scan_data?.detected_product_name || productNameInput || 'Scanned Food Product',
+          brand_name: parsedData.scan_data?.brand_name || '',
+          barcode_detected: Boolean(barcodeInput || parsedData.scan_data?.barcode_detected),
+          barcode_number: barcodeInput || parsedData.scan_data?.barcode_number || '',
+          openfoodfacts_matched: Boolean(parsedData.scan_data?.openfoodfacts_matched),
+        },
+        product_info: {
+          total_additives_found: Array.isArray(parsedData.additives_detected)
+            ? parsedData.additives_detected.length
+            : (parsedData.product_info?.total_additives_found ?? 0),
+        },
+        overall_analysis: {
+          health_summary: parsedData.overall_analysis?.health_summary || 'Analysis complete based on listed ingredients and current profile.',
+          key_warnings: Array.isArray(parsedData.overall_analysis?.key_warnings) ? parsedData.overall_analysis.key_warnings : [],
+          toxicological_note: parsedData.overall_analysis?.toxicological_note || 'Consume in moderation according to dietary guidance.',
+        },
+        additives_detected: Array.isArray(parsedData.additives_detected) ? parsedData.additives_detected : [],
         raw_ingredients_text: ingredientInput || productNameInput || barcodeInput || 'Image Scan',
         image_preview: selectedImage || undefined,
-        additives: Array.isArray(parsedData.additives) ? parsedData.additives : [],
-        dietary_flags: Array.isArray(parsedData.dietary_flags) ? parsedData.dietary_flags : [],
-        health_guidelines: Array.isArray(parsedData.health_guidelines) ? parsedData.health_guidelines : [],
+        allergen_alert: {
+          detected: Boolean(parsedData.allergen_alert?.detected),
+          allergen_name: parsedData.allergen_alert?.allergen_name || '',
+          warning_type: parsedData.allergen_alert?.warning_type || '',
+          message: parsedData.allergen_alert?.message || ''
+        },
       };
 
       setAnalysisResult(completeResult);

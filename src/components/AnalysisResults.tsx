@@ -60,7 +60,7 @@ export const AnalysisResults: React.FC<AnalysisResultsProps> = ({
         return {
           bg: 'bg-slate-800 text-slate-300 border-slate-700',
           icon: Info,
-          label: rating,
+          label: rating || 'Evaluated',
         };
     }
   };
@@ -163,8 +163,8 @@ export const AnalysisResults: React.FC<AnalysisResultsProps> = ({
           </div>
         </div>
 
-        {/* Critical Risk Warnings Banner */}
-        {overall_analysis.key_warnings && overall_analysis.key_warnings.length > 0 && (
+        {/* Critical Risk Warnings Banner (Protected with optional chaining) */}
+        {overall_analysis?.key_warnings && overall_analysis.key_warnings.length > 0 && (
           <div className="bg-rose-950/40 border border-rose-500/30 rounded-xl p-4 space-y-2">
             <div className="flex items-center space-x-2 text-rose-400 font-bold text-sm">
               <ShieldAlert className="w-5 h-5" />
@@ -183,11 +183,13 @@ export const AnalysisResults: React.FC<AnalysisResultsProps> = ({
           <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
             Health Evaluation Summary
           </h4>
-          <p className="text-sm text-slate-200 leading-relaxed">{overall_analysis.health_summary}</p>
+          <p className="text-sm text-slate-200 leading-relaxed">
+            {overall_analysis?.health_summary || 'Detailed summary generated for current profile.'}
+          </p>
         </div>
 
         {/* Toxicological Note */}
-        {overall_analysis.toxicological_note && (
+        {overall_analysis?.toxicological_note && (
           <div className="bg-slate-950/40 border border-slate-800/60 rounded-xl p-4 flex items-start space-x-2 text-xs text-slate-300">
             <Scale className="w-4 h-4 text-cyan-400 flex-shrink-0 mt-0.5" />
             <div>
