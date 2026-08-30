@@ -10,7 +10,8 @@ import {
   LogIn, 
   Calendar,
   AlertCircle,
-  Loader2
+  Loader2,
+  UserCheck
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { auth, db, googleProvider } from '../firebase';
@@ -54,11 +55,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
       let finalProfile: UserProfile;
 
       if (docSnap.exists() && tab === 'login') {
-        // Retrieve existing cloud data across other devices
         finalProfile = docSnap.data() as UserProfile;
         finalProfile.isLoggedIn = true;
       } else {
-        // Create new patient record
         finalProfile = {
           id: userId,
           email: userEmail,
@@ -80,7 +79,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
           ],
         };
 
-        // Write to Cloud Firestore
         await setDoc(userDocRef, finalProfile, { merge: true });
       }
 
@@ -88,7 +86,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
       onLoginSuccess(finalProfile);
     } catch (err: any) {
       console.warn('Firestore sync note:', err.message);
-      // Fallback local persistence if offline
       const fallbackProfile: UserProfile = {
         id: userId,
         email: userEmail,
@@ -142,12 +139,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
 
     try {
       if (tab === 'register') {
-        // Register in Cloud
         const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
         const user = userCredential.user;
         await syncProfileToCloud(user.uid, user.email || email.trim(), name.trim() || 'User');
       } else {
-        // Sign In from any device
         const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
         const user = userCredential.user;
         await syncProfileToCloud(user.uid, user.email || email.trim(), user.displayName || email.split('@')[0]);
@@ -163,6 +158,31 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // 3. Continue as Guest Session
+  const handleGuestLogin = () => {
+    const guestProfile: UserProfile = {
+      id: `guest-${Date.now()}`,
+      email: 'guest@nutriscan.local',
+      name: 'Guest User',
+      picture: '',
+      isLoggedIn: true,
+      symptoms: 'Standard Profile (Guest)',
+      medicalReports: [
+        {
+          id: `rep-guest-${Date.now()}`,
+          title: 'Guest Evaluation Profile',
+          category: 'General Diagnostics',
+          reportDate: new Date().toISOString().split('T')[0],
+          reportText: 'Temporary guest session ready for instant food safety screening.',
+          createdAt: new Date().toISOString(),
+        }
+      ],
+    };
+
+    localStorage.setItem('nutriscan_ai_user_profile_v1', JSON.stringify(guestProfile));
+    onLoginSuccess(guestProfile);
   };
 
   return (
@@ -365,7 +385,19 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
           </button>
         </form>
 
-        <div className="flex items-center justify-center gap-1.5 pt-2 text-[10px] text-slate-500 text-center">
+        {/* Guest Mode Option */}
+        <div className="pt-2 border-t border-slate-800/80">
+          <button
+            type="button"
+            onClick={handleGuestLogin}
+            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-slate-800/60 hover:bg-slate-800 active:scale-[0.99] text-slate-300 hover:text-white font-medium text-xs rounded-xl border border-slate-700/60 transition-all cursor-pointer"
+          >
+            <UserCheck className="w-4 h-4 text-emerald-400" />
+            <span>Continue as Guest (No sign-in needed)</span>
+          </button>
+        </div>
+
+        <div className="flex items-center justify-center gap-1.5 pt-1 text-[10px] text-slate-500 text-center">
           <Lock className="w-3 h-3 text-emerald-400" />
           <span>Multi-Device Sync • Encrypted Cloud Records</span>
         </div>

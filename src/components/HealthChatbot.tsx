@@ -9,8 +9,11 @@ import {
   Stethoscope, 
   PhoneCall,
   Image as ImageIcon,
-  Trash2
+  Trash2,
+  Loader2,
+  AlertTriangle
 } from 'lucide-react';
+import { GoogleGenAI } from '@google/genai';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -18,13 +21,14 @@ interface Message {
   image?: string;
 }
 
-const STORAGE_KEY_CHAT = 'foodwise_ai_chat_history_v9';
+const STORAGE_KEY_CHAT = 'foodwise_ai_chat_history_v10';
 
 export const HealthChatbot: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [messages, setMessages] = useState<Message[]>(() => {
@@ -56,6 +60,7 @@ export const HealthChatbot: React.FC = () => {
   const handleClearHistory = () => {
     setMessages([]);
     localStorage.removeItem(STORAGE_KEY_CHAT);
+    setApiError(null);
   };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -70,79 +75,83 @@ export const HealthChatbot: React.FC = () => {
   };
 
   const generateSmartResponse = async (history: Message[]): Promise<string> => {
-    // 1. Try Serverless /api/chat
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history }),
-      });
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('VITE_GEMINI_API_KEY is missing in your .env file.');
+    }
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.reply && data.reply.trim().length > 5) {
-          return data.reply.trim();
-        }
+    const ai = new GoogleGenAI({ apiKey });
+
+    // Retrieve active profile context if present in localStorage
+    let profileContext = '';
+    try {
+      const savedProfile = localStorage.getItem('nutriscan_ai_user_profile_v1');
+      if (savedProfile) {
+        const parsed = JSON.parse(savedProfile);
+        profileContext = `
+Patient Active Health Profile:
+- Name: ${parsed.name || 'User'}
+- Allergies / Recorded Sensitivities: ${parsed.symptoms || 'None specified'}
+- Medical History / Diagnostics: ${parsed.medicalReports?.map((r: any) => `${r.title}: ${r.reportText}`).join('; ') || 'None'}
+`;
       }
     } catch (e) {
-      console.warn('Backend /api/chat call dropped, trying direct browser route...', e);
+      console.warn('Could not read user profile context:', e);
     }
 
-    // 2. Direct Browser-side Gemini API (if key available in client environment)
-    const clientKey = import.meta.env.VITE_GEMINI_API_KEY;
-    if (clientKey) {
-      try {
-        const contents = history.map((m) => {
-          const parts: any[] = [{ text: m.content || '' }];
-          if (m.image && m.image.includes(',')) {
-            parts.push({
-              inline_data: {
-                mime_type: m.image.split(';')[0].replace('data:', '') || 'image/jpeg',
-                data: m.image.split(',')[1],
-              },
-            });
-          }
-          return { role: m.role === 'assistant' ? 'model' : 'user', parts };
-        });
+    const systemInstruction = `
+You are FoodWise Clinical AI, an expert medical triage assistant, clinical nutritionist, and emergency first-aid guide.
 
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${clientKey}`;
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents }),
-        });
+Core Guidelines:
+1. **Medical & Nutrition Expertise**: Provide clear, accurate clinical insights for symptoms, food allergies, dietary restrictions, skin conditions (rashes, hives), and ingredient safety.
+2. **Image Evaluation**: When an image is provided, carefully evaluate visible clinical markers (erythema, swelling, urticaria, lesion borders) and describe your observations clearly.
+3. **Structured Response Style**:
+   - **Clinical Impression**: Concise summary of what the symptoms suggest.
+   - **Potential Factors / Triggers**: Key possibilities (e.g., allergic reaction, contact dermatitis, nutrient deficiency).
+   - **Recommended Next Steps / First Aid**: Practical, safe actions the user can take now.
+   - **When to Seek Immediate Care**: Specific red flags requiring emergency or urgent medical evaluation.
+4. **Safety Protocols**: If the user reports severe respiratory distress, throat tightening, anaphylaxis symptoms, chest pain, or neurological deficits, immediately instruct them to contact emergency services (911 / 112) right away.
 
-        if (res.ok) {
-          const json = await res.json();
-          const reply = json.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (reply) return reply.trim();
-        }
-      } catch (err) {
-        console.warn('Direct client Gemini fetch failed:', err);
+${profileContext}
+`;
+
+    // Map message history to Gemini API format
+    const contents = history.map((msg) => {
+      const parts: any[] = [];
+      if (msg.image && msg.image.includes(',')) {
+        const mimeType = msg.image.split(';')[0].replace('data:', '') || 'image/jpeg';
+        const cleanBase64 = msg.image.split(',')[1];
+        parts.push({
+          inlineData: {
+            mimeType,
+            data: cleanBase64,
+          },
+        });
       }
-    }
+      parts.push({ text: msg.content || '(Photo attached for clinical evaluation)' });
 
-    // 3. Guaranteed Contextual Health Response
-    const latest = history[history.length - 1]?.content.toLowerCase() || '';
-    if (latest === 'hi' || latest === 'hello' || latest === 'hey') {
-      return `Hello! 👋 How can I help you today?\n\nPlease describe any symptoms you are experiencing or attach a photo of a rash/swelling for immediate first aid and doctor referrals.`;
-    }
+      return {
+        role: msg.role === 'user' ? 'user' : 'model',
+        parts,
+      };
+    });
 
-    if (latest.includes('numb') || latest.includes('tingl') || latest.includes('leg') || latest.includes('foot')) {
-      return `**Clinical Assessment & Referral:**\n\n* **Suspected Condition**: Peripheral Nerve Compression / Sciatica / Transient Circulation Depletion\n* **Recommended Specialist**: **Neurologist** or **Orthopedist**\n\n**Immediate First-Aid Protocol:**\n1. **Relieve Pressure**: Uncross legs and remove tight shoes or tight socks.\n2. **Gentle Movement**: Flex feet and wiggle toes continuously for 2–3 minutes.\n3. **Posture Check**: Keep spine aligned and avoid slumping.\n4. **Emergency**: If accompanied by facial droop or arm weakness, call 911 / 112 immediately.`;
-    }
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.6-flash',
+      contents: contents as any,
+      config: {
+        systemInstruction,
+        temperature: 0.3,
+      },
+    });
 
-    if (latest.includes('swell') || latest.includes('hand') || latest.includes('wrist') || latest.includes('finger')) {
-      return `**Clinical Assessment & Referral:**\n\n* **Suspected Condition**: Acute Peripheral Edema / Localized Allergic Reaction (Angioedema)\n* **Recommended Specialist**: **Allergist / Immunologist** or **Orthopedist**\n\n**Immediate First-Aid Protocol:**\n1. **Remove Rings**: Take off all rings and watches immediately before circulation is blocked.\n2. **Elevate Hand**: Prop hand above heart level on a pillow.\n3. **Cold Compress**: Apply an ice pack wrapped in a towel for 10–15 minutes.\n4. **Emergency**: Seek emergency care if throat swelling or breathing issues occur.`;
-    }
-
-    return `**Clinical Assessment:**\n\nI have evaluated your message: **"${history[history.length - 1]?.content}"**.\n\n* **Recommended Specialist**: **General Physician (GP)** for comprehensive diagnostic evaluation.\n\n**Immediate Guidance:**\n1. **Rest**: Avoid strenuous physical exertion until evaluated.\n2. **Hydration**: Maintain steady electrolyte and water intake.\n3. **Detail**: Let me know if you have any pain (1–10 scale), fever, or visible swelling.`;
+    return response.text || 'I have reviewed your inquiry. Please consult a qualified medical professional for definitive diagnosis.';
   };
 
   const handleSend = async () => {
     if ((!input.trim() && !selectedImage) || loading) return;
 
-    const userText = input.trim() || (selectedImage ? 'Attached photo for symptom evaluation.' : '');
+    const userText = input.trim() || (selectedImage ? 'Please review the attached photo for symptoms/rashes and advise.' : '');
     const currentImg = selectedImage;
 
     const updatedHistory: Message[] = [
@@ -154,16 +163,19 @@ export const HealthChatbot: React.FC = () => {
     setInput('');
     setSelectedImage(null);
     setLoading(true);
+    setApiError(null);
 
     try {
       const aiReply = await generateSmartResponse(updatedHistory);
       setMessages([...updatedHistory, { role: 'assistant', content: aiReply }]);
     } catch (err: any) {
+      console.error('Chatbot error:', err);
+      setApiError(err.message || 'Failed to connect to Gemini AI.');
       setMessages([
         ...updatedHistory,
         {
           role: 'assistant',
-          content: `Hello! I have noted your message. Please share more details regarding your symptoms so I can provide exact first-aid steps.`,
+          content: '⚠️ I encountered an issue analyzing your request. Please verify your Gemini API key or try again.',
         },
       ]);
     } finally {
@@ -237,7 +249,7 @@ export const HealthChatbot: React.FC = () => {
                   <div
                     className={`max-w-[88%] rounded-2xl px-4 py-3 text-xs leading-relaxed space-y-2 ${
                       msg.role === 'user'
-                        ? 'bg-emerald-500 text-slate-950 font-medium rounded-br-none'
+                        ? 'bg-emerald-500 text-slate-950 font-semibold rounded-br-none'
                         : 'bg-slate-800/90 text-slate-100 border border-slate-700/60 rounded-bl-none shadow-md'
                     }`}
                   >
@@ -245,7 +257,7 @@ export const HealthChatbot: React.FC = () => {
                       <img 
                         src={msg.image} 
                         alt="Uploaded symptom" 
-                        className="rounded-xl max-h-48 w-auto object-cover border border-slate-700/50"
+                        className="rounded-xl max-h-48 w-auto object-cover border border-slate-700/50 mb-1"
                       />
                     )}
                     <div className="whitespace-pre-wrap">{msg.content}</div>
@@ -256,11 +268,19 @@ export const HealthChatbot: React.FC = () => {
               {loading && (
                 <div className="flex justify-start">
                   <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl rounded-bl-none px-4 py-3 flex items-center gap-2 text-xs text-slate-400">
-                    <HeartPulse className="w-3.5 h-3.5 animate-pulse text-emerald-400" />
-                    <span>Analyzing clinical scenario...</span>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                    <span>Analyzing clinical scenario & image...</span>
                   </div>
                 </div>
               )}
+
+              {apiError && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                  <span>{apiError}</span>
+                </div>
+              )}
+
               <div ref={messagesEndRef} />
             </div>
 
@@ -276,7 +296,7 @@ export const HealthChatbot: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setSelectedImage(null)}
-                    className="absolute -top-1.5 -right-1.5 bg-rose-500 hover:bg-rose-400 text-white p-0.5 rounded-full shadow"
+                    className="absolute -top-1.5 -right-1.5 bg-rose-500 hover:bg-rose-400 text-white p-0.5 rounded-full shadow cursor-pointer"
                   >
                     <Trash2 className="w-3 h-3" />
                   </button>

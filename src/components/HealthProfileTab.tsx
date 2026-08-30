@@ -13,8 +13,14 @@ import {
   File,
   Loader2,
   Sparkles,
-  AlertCircle
+  AlertCircle,
+  Activity,
+  ShieldAlert,
+  AlertTriangle,
+  CheckCircle2,
+  Stethoscope
 } from 'lucide-react';
+import { GoogleGenAI } from '@google/genai';
 import { UserProfile, UserPreferences, MedicalReport } from '../types';
 
 interface HealthProfileTabProps {
@@ -22,6 +28,20 @@ interface HealthProfileTabProps {
   setUserProfile: React.Dispatch<React.SetStateAction<UserProfile | null>>;
   userPreferences: UserPreferences;
   setUserPreferences: React.Dispatch<React.SetStateAction<UserPreferences>>;
+}
+
+interface ClinicalSynthesis {
+  headline: string;
+  keyConditions: string[];
+  dietaryRisks: string[];
+  recommendations: string[];
+  lastEvaluated: string;
+}
+
+interface MedicalExtractionResult {
+  summary: string;
+  diagnosed_sensitivities: string[];
+  additives_to_avoid: string[];
 }
 
 export const HealthProfileTab: React.FC<HealthProfileTabProps> = ({
@@ -35,6 +55,11 @@ export const HealthProfileTab: React.FC<HealthProfileTabProps> = ({
     Array.isArray(userProfile.symptoms) ? userProfile.symptoms.join(', ') : (userProfile.symptoms || '')
   );
 
+  // Analysis State (Controlled manually by button)
+  const [analysis, setAnalysis] = useState<ClinicalSynthesis | null>(null);
+  const [isAnalyzingHealth, setIsAnalyzingHealth] = useState<boolean>(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+
   // Manual Add Form State
   const [showAddReport, setShowAddReport] = useState(false);
   const [reportTitle, setReportTitle] = useState('');
@@ -42,12 +67,132 @@ export const HealthProfileTab: React.FC<HealthProfileTabProps> = ({
   const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
   const [reportText, setReportText] = useState('');
 
-  // File Upload State (PDFs, Images, Photos)
+  // File Upload State
   const [isAnalyzingFile, setIsAnalyzingFile] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const reports = userProfile.medicalReports || [];
+
+  // Helper function: Document Extractor
+  const extractMedicalDocument = async (
+    base64Data: string,
+    mimeType: string
+  ): Promise<MedicalExtractionResult> => {
+    const cleanBase64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
+
+    if (!apiKey) {
+      throw new Error('VITE_GEMINI_API_KEY is missing in your .env file');
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
+    const validMimeType = mimeType || (cleanBase64.startsWith('JVBERi0') ? 'application/pdf' : 'image/jpeg');
+
+    const prompt = `
+You are an expert clinical dietitian and medical record analyzer.
+Read this medical document and extract:
+1. All diagnosed clinical conditions, health issues, allergies, and food sensitivities.
+2. Specific food ingredients, chemical additives, preservatives, artificial colorings, or sweeteners the patient must avoid.
+3. A clear 2-3 sentence clinical summary of the patient's health findings.
+
+Respond ONLY with a valid JSON object matching this schema:
+{
+  "summary": "Concise 2-3 sentence overview of medical findings",
+  "diagnosed_sensitivities": ["Condition or Allergy 1", "Condition 2"],
+  "additives_to_avoid": ["Ingredient/Additive 1", "Additive 2"]
+}
+`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.6-flash',
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              inlineData: {
+                data: cleanBase64,
+                mimeType: validMimeType,
+              },
+            },
+            { text: prompt },
+          ],
+        },
+      ],
+      config: {
+        responseMimeType: 'application/json',
+      },
+    });
+
+    const rawText = response.text || '{}';
+    const sanitizedText = rawText.replace(/```json\n?|```/g, '').trim();
+    const parsed = JSON.parse(sanitizedText || '{}');
+
+    return {
+      summary: parsed.summary || 'Clinical record reviewed and active triggers recorded.',
+      diagnosed_sensitivities: Array.isArray(parsed.diagnosed_sensitivities) ? parsed.diagnosed_sensitivities : [],
+      additives_to_avoid: Array.isArray(parsed.additives_to_avoid) ? parsed.additives_to_avoid : [],
+    };
+  };
+
+  // Button Action: Analyze full health profile on demand
+  const handleAnalyzeHealthProfile = async () => {
+    setIsAnalyzingHealth(true);
+    setAnalysisError(null);
+
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
+      if (!apiKey) throw new Error('VITE_GEMINI_API_KEY is not configured in .env');
+
+      const ai = new GoogleGenAI({ apiKey });
+
+      const reportsContext = reports
+        .map((r, i) => `Report ${i + 1} (${r.title || 'Untitled'} - ${r.reportDate || 'N/A'}): ${r.reportText || ''}`)
+        .join('\n');
+
+      const prompt = `
+You are a senior clinical nutritionist and health assessor.
+Analyze the user's complete profile and generate an exhaustive health overview:
+- Active Symptoms / Allergies: ${userProfile.symptoms || 'None listed'}
+- Attached Medical Reports & Diagnoses:
+${reportsContext || 'No medical reports attached'}
+
+Analyze the health baseline and return ONLY a strict JSON object with this exact schema:
+{
+  "headline": "1 clear sentence summarizing overall current health baseline and primary focus",
+  "keyConditions": ["Identified health factor/allergy 1", "Condition 2"],
+  "dietaryRisks": ["Specific additive or ingredient to screen out 1", "Additive 2"],
+  "recommendations": ["Actionable dietary guideline 1", "Guideline 2", "Guideline 3"]
+}
+`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.6-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+        },
+      });
+
+      const rawText = response.text || '{}';
+      const sanitizedText = rawText.replace(/```json\n?|```/g, '').trim();
+      const parsed = JSON.parse(sanitizedText || '{}');
+
+      setAnalysis({
+        headline: parsed.headline || 'Health baseline evaluated.',
+        keyConditions: Array.isArray(parsed.keyConditions) && parsed.keyConditions.length > 0 ? parsed.keyConditions : [userProfile.symptoms || 'General Health Active'],
+        dietaryRisks: Array.isArray(parsed.dietaryRisks) && parsed.dietaryRisks.length > 0 ? parsed.dietaryRisks : ['High sodium', 'Ultra-processed preservatives'],
+        recommendations: Array.isArray(parsed.recommendations) && parsed.recommendations.length > 0 ? parsed.recommendations : ['Always screen packaged food labels for additives.'],
+        lastEvaluated: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      });
+    } catch (err: any) {
+      console.error('Analysis error:', err);
+      setAnalysisError(err.message || 'Failed to synthesize profile.');
+    } finally {
+      setIsAnalyzingHealth(false);
+    }
+  };
 
   const handleSaveProfile = () => {
     setUserProfile((prev) => {
@@ -64,7 +209,6 @@ export const HealthProfileTab: React.FC<HealthProfileTabProps> = ({
     setIsEditing(false);
   };
 
-  // 1. Handle File Upload (PDF, JPG, PNG) & Trigger Gemini AI Extraction
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -78,43 +222,25 @@ export const HealthProfileTab: React.FC<HealthProfileTabProps> = ({
       const mimeType = file.type || (file.name.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg');
 
       try {
-        const res = await fetch('/api/analyze-health-report', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            reportFile: base64Data,
-            mimeType,
-            fileName: file.name,
-            symptoms: userProfile.symptoms || '',
-          }),
-        });
+        const aiResult = await extractMedicalDocument(base64Data, mimeType);
 
-        if (!res.ok) {
-          throw new Error('Failed to parse medical file');
-        }
-
-        const aiResult = await res.json();
-
-        // Construct dynamic clinical summary from AI output
         let extractedSummary = '';
-        if (typeof aiResult === 'object') {
-          if (aiResult.diagnosed_sensitivities?.length) {
-            extractedSummary += `Sensitivities: ${aiResult.diagnosed_sensitivities.join(', ')}. `;
-          }
-          if (aiResult.additives_to_avoid?.length) {
-            extractedSummary += `Additives to avoid: ${aiResult.additives_to_avoid.join(', ')}. `;
-          }
-          if (aiResult.summary) {
-            extractedSummary += `Clinical Summary: ${aiResult.summary}`;
-          }
+        if (aiResult.diagnosed_sensitivities?.length) {
+          extractedSummary += `Sensitivities: ${aiResult.diagnosed_sensitivities.join(', ')}. `;
+        }
+        if (aiResult.additives_to_avoid?.length) {
+          extractedSummary += `Avoid: ${aiResult.additives_to_avoid.join(', ')}. `;
+        }
+        if (aiResult.summary) {
+          extractedSummary += `Clinical Summary: ${aiResult.summary}`;
         }
 
         const newReport: MedicalReport = {
           id: `rep-${Date.now()}`,
-          title: file.name.replace(/\.[^/.]+$/, ''), // remove file extension
-          category: file.name.toLowerCase().includes('blood') ? 'Blood Work' : 'Allergy Panel',
+          title: file.name.replace(/\.[^/.]+$/, ''),
+          category: file.name.toLowerCase().includes('blood') ? 'Blood Work' : 'General Diagnostics',
           reportDate: new Date().toISOString().split('T')[0],
-          reportText: extractedSummary || `AI analyzed document (${file.name}) and mapped clinical dietary restrictions.`,
+          reportText: extractedSummary || 'Clinical findings extracted from document.',
           createdAt: new Date().toISOString(),
         };
 
@@ -131,22 +257,7 @@ export const HealthProfileTab: React.FC<HealthProfileTabProps> = ({
         });
       } catch (err: any) {
         console.error('File parsing error:', err);
-        // Fallback: save document reference even if AI service timed out
-        const fallbackReport: MedicalReport = {
-          id: `rep-${Date.now()}`,
-          title: file.name,
-          category: 'General Diagnostics',
-          reportDate: new Date().toISOString().split('T')[0],
-          reportText: `Uploaded file: ${file.name}. Added to active medical context.`,
-          createdAt: new Date().toISOString(),
-        };
-        const updatedReports = [fallbackReport, ...reports];
-        setUserProfile((prev) => {
-          if (!prev) return null;
-          const updated = { ...prev, medicalReports: updatedReports };
-          localStorage.setItem('nutriscan_ai_user_profile_v1', JSON.stringify(updated));
-          return updated;
-        });
+        setUploadError(err.message || 'Failed to analyze medical file.');
       } finally {
         setIsAnalyzingFile(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -273,6 +384,7 @@ export const HealthProfileTab: React.FC<HealthProfileTabProps> = ({
                 type="text"
                 value={symptoms}
                 onChange={(e) => setSymptoms(e.target.value)}
+                placeholder="e.g. Celiac, Peanuts, Lactose intolerance, GERD"
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
               />
             </div>
@@ -294,18 +406,137 @@ export const HealthProfileTab: React.FC<HealthProfileTabProps> = ({
         )}
       </div>
 
-      {/* 2. Drag & Drop / File Upload Area for Medical Documents */}
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-extrabold text-white flex items-center gap-2">
-              <UploadCloud className="w-5 h-5 text-emerald-400" />
-              Upload Medical Reports & Documents
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Upload PDF lab reports, blood work photos, or doctor notes. AI will extract contraindications automatically.
-            </p>
+      {/* 2. Manual Action: "Analyze Profile" & Summary Section */}
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shadow-lg shadow-emerald-500/10">
+              <Stethoscope className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-black text-white flex items-center gap-2">
+                Clinical Health & Dietary Analysis
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Click below to synthesize symptoms, uploaded medical files, and food risks with Gemini AI
+              </p>
+            </div>
           </div>
+
+          <button
+            type="button"
+            onClick={handleAnalyzeHealthProfile}
+            disabled={isAnalyzingHealth}
+            className="flex items-center justify-center gap-2 px-5 py-3 bg-emerald-500 hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-50 text-slate-950 font-black text-xs rounded-2xl shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
+          >
+            {isAnalyzingHealth ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Analyzing Health Data...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                <span>{analysis ? 'Re-Analyze Profile' : 'Analyze Health Profile'}</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {analysisError && (
+          <div className="flex items-center gap-2 p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <span>{analysisError}</span>
+          </div>
+        )}
+
+        {/* Rendered Summary Box */}
+        {analysis ? (
+          <div className="space-y-4 pt-4 border-t border-slate-800">
+            {/* Headline Banner */}
+            <div className="p-4 bg-emerald-950/30 border border-emerald-500/20 rounded-2xl">
+              <div className="flex items-start gap-2.5">
+                <Activity className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
+                <div>
+                  <span className="text-xs font-bold text-emerald-300">Executive Summary: </span>
+                  <span className="text-xs text-slate-300">{analysis.headline}</span>
+                </div>
+              </div>
+              <div className="mt-2 text-[10px] text-slate-500 text-right">
+                Synthesized at {analysis.lastEvaluated}
+              </div>
+            </div>
+
+            {/* Conditions & Flagged Ingredients */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-2xl space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
+                  <HeartPulse className="w-4 h-4 text-rose-400" />
+                  <span>Identified Health Factors / Diagnoses</span>
+                </div>
+                <ul className="space-y-1">
+                  {analysis.keyConditions.map((cond, idx) => (
+                    <li key={idx} className="flex items-start gap-1.5 text-xs text-slate-300">
+                      <span className="text-rose-400 font-bold">•</span>
+                      <span>{cond}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-2xl space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
+                  <ShieldAlert className="w-4 h-4 text-amber-400" />
+                  <span>Flagged Ingredients & Additives</span>
+                </div>
+                <ul className="space-y-1">
+                  {analysis.dietaryRisks.map((risk, idx) => (
+                    <li key={idx} className="flex items-start gap-1.5 text-xs text-slate-300">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-shrink-0" />
+                      <span>{risk}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            {/* Nutrition Guidelines */}
+            <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-2xl space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <span>Personalized Nutrition Guidance</span>
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                {analysis.recommendations.map((rec, idx) => (
+                  <div key={idx} className="text-xs text-slate-300 flex items-start gap-2 bg-slate-900/80 p-2.5 rounded-xl border border-slate-800/80">
+                    <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                      {idx + 1}
+                    </span>
+                    <span>{rec}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          !isAnalyzingHealth && (
+            <div className="text-center py-6 text-xs text-slate-500 border border-dashed border-slate-800 rounded-2xl bg-slate-950/30">
+              Click <strong className="text-emerald-400">"Analyze Health Profile"</strong> above to extract conditions and dietary rules across your profile.
+            </div>
+          )
+        )}
+      </div>
+
+      {/* 3. File Upload Area for Medical Documents */}
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-4">
+        <div>
+          <h3 className="text-base font-extrabold text-white flex items-center gap-2">
+            <UploadCloud className="w-5 h-5 text-emerald-400" />
+            Upload Medical Reports & Documents
+          </h3>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Upload PDF lab reports, blood work photos, or doctor notes. AI will extract contraindications automatically.
+          </p>
         </div>
 
         <input
@@ -355,7 +586,7 @@ export const HealthProfileTab: React.FC<HealthProfileTabProps> = ({
         )}
       </div>
 
-      {/* 3. Medical Diagnostic Records List */}
+      {/* 4. Active Medical Reports List */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-base font-extrabold text-white flex items-center gap-2">
@@ -372,7 +603,6 @@ export const HealthProfileTab: React.FC<HealthProfileTabProps> = ({
           </button>
         </div>
 
-        {/* Manual Add Form Modal */}
         {showAddReport && (
           <div className="bg-slate-900 border-2 border-emerald-500/40 rounded-3xl p-6 shadow-2xl">
             <form onSubmit={handleManualAddReport} className="space-y-4">
@@ -435,7 +665,6 @@ export const HealthProfileTab: React.FC<HealthProfileTabProps> = ({
           </div>
         )}
 
-        {/* Report Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {reports.map((report) => (
             <div key={report.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
