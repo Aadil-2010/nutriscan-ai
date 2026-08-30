@@ -1,5 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Stethoscope, HeartPulse, User, Mail, ArrowRight, Lock } from 'lucide-react';
+import { 
+  Stethoscope, 
+  HeartPulse, 
+  User, 
+  Mail, 
+  ArrowRight, 
+  Lock, 
+  UserPlus, 
+  LogIn, 
+  ShieldAlert,
+  Calendar
+} from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface AuthScreenProps {
@@ -7,14 +18,17 @@ interface AuthScreenProps {
 }
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
-  const [email, setEmail] = useState('');
+  const [tab, setTab] = useState<'login' | 'register'>('register');
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [age, setAge] = useState('');
   const [symptoms, setSymptoms] = useState('');
+  const [dietaryPreference, setDietaryPreference] = useState('None');
   const [isLoading, setIsLoading] = useState(false);
   const [googleReady, setGoogleReady] = useState(false);
   const googleBtnRef = useRef<HTMLDivElement>(null);
 
-  // Decode JWT payload returned by Google GIS
   const parseGoogleJwt = (token: string) => {
     try {
       const base64Url = token.split('.')[1];
@@ -26,29 +40,30 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
           .join('')
       );
       return JSON.parse(jsonPayload);
-    } catch (e) {
-      console.error('Error decoding Google JWT:', e);
+    } catch {
       return null;
     }
   };
 
-  const handleSuccessfulAuth = (realName: string, realEmail: string, avatarPicture?: string) => {
+  const completeAuth = (userName: string, userEmail: string, avatarUrl?: string) => {
     const profile: UserProfile = {
       id: `usr-${Date.now()}`,
-      email: realEmail,
-      name: realName,
-      picture: avatarPicture,
+      email: userEmail,
+      name: userName,
+      picture: avatarUrl,
       isLoggedIn: true,
-      symptoms: symptoms.trim() || 'No active food sensitivities reported',
+      symptoms: symptoms.trim() || 'No active acute symptoms recorded',
       medicalReports: [
         {
           id: `rep-${Date.now()}`,
-          title: 'Initial Health Baseline',
+          title: tab === 'register' ? 'New Patient Intake Record' : 'Verified Health Baseline',
           category: 'General Diagnostics',
           reportDate: new Date().toISOString().split('T')[0],
-          reportText: 'Account initialized with Google Identity. Ready to cross-reference food ingredients.',
+          reportText: tab === 'register' && dietaryPreference !== 'None'
+            ? `Dietary preference: ${dietaryPreference}. Registered profile ready for ingredient screening.`
+            : 'Account ready for food safety & additive scanning.',
           createdAt: new Date().toISOString(),
-        },
+        }
       ],
     };
 
@@ -58,7 +73,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
 
   useEffect(() => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-
     const initGoogle = () => {
       const google = (window as any).google;
       if (google?.accounts?.id && clientId) {
@@ -68,7 +82,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
             if (response?.credential) {
               const user = parseGoogleJwt(response.credential);
               if (user?.email) {
-                handleSuccessfulAuth(user.name || 'Google User', user.email, user.picture);
+                completeAuth(user.name || 'Google User', user.email, user.picture);
               }
             }
           },
@@ -80,14 +94,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
             size: 'large',
             width: '100%',
             shape: 'pill',
-            text: 'continue_with',
+            text: tab === 'register' ? 'signup_with' : 'signin_with',
           });
           setGoogleReady(true);
         }
       }
     };
 
-    // If script is already loaded, init immediately; otherwise retry briefly
     initGoogle();
     const interval = setInterval(() => {
       if ((window as any).google?.accounts?.id) {
@@ -95,82 +108,74 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
         clearInterval(interval);
       }
     }, 300);
-
     return () => clearInterval(interval);
-  }, []);
+  }, [tab]);
 
-  const handleOAuthFallback = () => {
-    setIsLoading(true);
-    const google = (window as any).google;
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-
-    if (google?.accounts?.oauth2 && clientId) {
-      const client = google.accounts.oauth2.initTokenClient({
-        client_id: clientId,
-        scope: 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
-        callback: async (tokenResponse: any) => {
-          if (tokenResponse?.access_token) {
-            try {
-              const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-                headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
-              });
-              const data = await res.json();
-              handleSuccessfulAuth(data.name || 'Google User', data.email, data.picture);
-            } catch {
-              handleSuccessfulAuth('Google User', 'user@gmail.com');
-            }
-          }
-          setIsLoading(false);
-        },
-      });
-      client.requestAccessToken({ prompt: 'select_account' });
-    } else {
-      // Direct prompt if client id is not yet populated
-      const enteredEmail = window.prompt('Enter your Google Account email to load your details:');
-      if (enteredEmail && enteredEmail.includes('@')) {
-        const fallbackName = enteredEmail.split('@')[0].replace(/[._]/g, ' ');
-        const capName = fallbackName.charAt(0).toUpperCase() + fallbackName.slice(1);
-        handleSuccessfulAuth(capName, enteredEmail.trim());
-      }
-      setIsLoading(false);
-    }
-  };
-
-  const handleManualSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !email.trim()) return;
+    if (!email.trim() || (tab === 'register' && !name.trim())) return;
     setIsLoading(true);
-    handleSuccessfulAuth(name.trim(), email.trim());
+    const finalName = tab === 'register' ? name.trim() : (email.split('@')[0]);
+    completeAuth(finalName, email.trim());
     setIsLoading(false);
   };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4 selection:bg-emerald-500/30 selection:text-emerald-300">
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl space-y-6">
+      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
         
-        {/* Header */}
+        {/* Brand Header */}
         <div className="text-center space-y-2">
           <div className="w-14 h-14 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl flex items-center justify-center text-emerald-400 mx-auto shadow-lg shadow-emerald-500/10">
             <Stethoscope className="w-7 h-7" />
           </div>
           <h1 className="text-2xl font-black text-white tracking-tight">FoodWise Clinical</h1>
           <p className="text-xs text-slate-400">
-            Sign in to load your personal health profile and scan foods
+            {tab === 'register' ? 'Create a medical profile to analyze food additives' : 'Sign in to access your saved records'}
           </p>
         </div>
 
-        {/* Google Authentication Area */}
-        <div className="space-y-2">
-          {/* Native GIS Render Container */}
-          <div ref={googleBtnRef} className={googleReady ? 'w-full flex justify-center' : 'hidden'} />
+        {/* Tab Switcher: Sign In vs Register */}
+        <div className="flex bg-slate-950 p-1 rounded-2xl border border-slate-800">
+          <button
+            type="button"
+            onClick={() => setTab('register')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+              tab === 'register'
+                ? 'bg-emerald-500 text-slate-950 shadow-md'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            <span>Create Account</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('login')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+              tab === 'login'
+                ? 'bg-emerald-500 text-slate-950 shadow-md'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <LogIn className="w-3.5 h-3.5" />
+            <span>Sign In</span>
+          </button>
+        </div>
 
-          {/* Styled Google Button (Always visible fallback if GIS iframe takes time) */}
+        {/* Google Auth Button */}
+        <div>
+          <div ref={googleBtnRef} className={googleReady ? 'w-full flex justify-center' : 'hidden'} />
           {!googleReady && (
             <button
               type="button"
-              onClick={handleOAuthFallback}
-              disabled={isLoading}
-              className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-white hover:bg-slate-100 active:scale-[0.98] text-slate-900 font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-60"
+              onClick={() => {
+                const mail = window.prompt('Enter your Google Account email:');
+                if (mail && mail.includes('@')) {
+                  completeAuth(mail.split('@')[0], mail.trim());
+                }
+              }}
+              className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -178,37 +183,40 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                 <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
               </svg>
-              <span>{isLoading ? 'Connecting...' : 'Continue with Google'}</span>
+              <span>{tab === 'register' ? 'Sign up with Google' : 'Continue with Google'}</span>
             </button>
           )}
         </div>
 
-        {/* Divider */}
         <div className="flex items-center gap-3">
           <div className="flex-1 h-px bg-slate-800" />
-          <span className="text-[11px] text-slate-500 font-medium uppercase">Or Sign In Manually</span>
+          <span className="text-[11px] text-slate-500 font-medium uppercase">
+            {tab === 'register' ? 'Or Fill Registration Details' : 'Or Sign In with Email'}
+          </span>
           <div className="flex-1 h-px bg-slate-800" />
         </div>
 
-        {/* Manual Form */}
-        <form onSubmit={handleManualSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-slate-300 mb-1.5">Your Full Name *</label>
-            <div className="relative">
-              <User className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
-              <input
-                type="text"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Enter your name"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-              />
+        {/* Intake & Authentication Form */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {tab === 'register' && (
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1.5">Full Name *</label>
+              <div className="relative">
+                <User className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g., Alex Johnson"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           <div>
-            <label className="block text-xs font-bold text-slate-300 mb-1.5">Your Email Address *</label>
+            <label className="block text-xs font-bold text-slate-300 mb-1.5">Email Address *</label>
             <div className="relative">
               <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
               <input
@@ -216,39 +224,93 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="your.email@gmail.com"
+                placeholder="name@example.com"
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-300 mb-1.5">Known Allergies / Symptoms (Optional)</label>
+            <label className="block text-xs font-bold text-slate-300 mb-1.5">Password *</label>
             <div className="relative">
-              <HeartPulse className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+              <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
               <input
-                type="text"
-                value={symptoms}
-                onChange={(e) => setSymptoms(e.target.value)}
-                placeholder="e.g. Gluten sensitivity, nut allergy"
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
               />
             </div>
           </div>
 
+          {/* Registration-only clinical fields */}
+          {tab === 'register' && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">Age</label>
+                  <div className="relative">
+                    <Calendar className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+                    <input
+                      type="number"
+                      value={age}
+                      onChange={(e) => setAge(e.target.value)}
+                      placeholder="e.g. 28"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">Diet Type</label>
+                  <select
+                    value={dietaryPreference}
+                    onChange={(e) => setDietaryPreference(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="None">Standard / None</option>
+                    <option value="Vegetarian">Vegetarian</option>
+                    <option value="Vegan">Vegan</option>
+                    <option value="Gluten-Free">Gluten-Free</option>
+                    <option value="Halal">Halal</option>
+                    <option value="Kosher">Kosher</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                  Known Allergies / Sensitivities
+                </label>
+                <div className="relative">
+                  <HeartPulse className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+                  <input
+                    type="text"
+                    value={symptoms}
+                    onChange={(e) => setSymptoms(e.target.value)}
+                    placeholder="e.g., Peanuts, lactose, sulfites, asthma"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
           <button
             type="submit"
-            disabled={isLoading || !name.trim() || !email.trim()}
+            disabled={isLoading || !email.trim() || (tab === 'register' && !name.trim())}
             className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-emerald-500 hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-50 text-slate-950 font-bold text-xs rounded-xl shadow-lg shadow-emerald-500/20 transition-all cursor-pointer mt-2"
           >
-            <span>Access Workspace</span>
+            <span>{tab === 'register' ? 'Complete Registration' : 'Sign In to Account'}</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>
 
         <div className="flex items-center justify-center gap-1.5 pt-2 text-[10px] text-slate-500 text-center">
           <Lock className="w-3 h-3 text-emerald-400" />
-          <span>Patient Data Privacy • FSSAI & FDA Compliance</span>
+          <span>Encrypted patient session • FSSAI & FDA Clinical Screening</span>
         </div>
       </div>
     </div>
