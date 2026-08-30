@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { 
   Stethoscope, 
   HeartPulse, 
@@ -13,17 +13,17 @@ import {
   Loader2
 } from 'lucide-react';
 import { UserProfile } from '../types';
+import { auth, db, googleProvider } from '../firebase';
 import { 
-  auth, 
-  db, 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
-  signInWithPopup, 
-  googleProvider,
+  signInWithPopup 
+} from 'firebase/auth';
+import { 
   doc, 
   setDoc, 
   getDoc 
-} from '../firebase';
+} from 'firebase/firestore';
 
 interface AuthScreenProps {
   onLoginSuccess: (profile: UserProfile) => void;
