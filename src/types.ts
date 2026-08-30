@@ -33,6 +33,13 @@ export interface OverallAnalysis {
   additive_count?: number; // legacy fallback support
 }
 
+export interface AllergenAlert {
+  detected: boolean;
+  allergen_name?: string;
+  message?: string;
+  warning_type?: string;
+}
+
 export interface NutriScanResult {
   id?: string;
   timestamp?: string;
@@ -44,6 +51,9 @@ export interface NutriScanResult {
   raw_ingredients_text?: string;
   image_preview?: string;
   off_image_url?: string;
+  allergen_alert?: AllergenAlert;
+  suitability_score?: number;
+  overall_status?: 'Suitable' | 'Caution' | 'Unsuitable';
 }
 
 export interface UserPreferences {
@@ -52,6 +62,7 @@ export interface UserPreferences {
   kidsSafetyFocus: boolean;
   fssaiIndiaFocus: boolean;
   igeAllergyProne: boolean;
+  customSensitivities?: string[];
 }
 
 export interface AdditiveToAvoid {
@@ -69,6 +80,18 @@ export interface HealthReportAnalysis {
   medical_disclaimer: string;
 }
 
+// Single Medical Report Record
+export interface MedicalReport {
+  id: string;
+  title: string;
+  reportDate: string;
+  category: 'Allergy Panel' | 'Blood Work' | 'Gastroenterology' | 'Endocrine' | 'General Diagnostics';
+  reportText: string;
+  filePreview?: string;
+  analysis?: HealthReportAnalysis;
+  createdAt: string;
+}
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -77,6 +100,8 @@ export interface UserProfile {
   symptoms: string;
   medicalReportFileName?: string;
   medicalReportAnalysis?: HealthReportAnalysis;
+  medicalReports?: MedicalReport[]; // Supports storing multiple saved lab/diagnostic reports
+  customAllergens?: string[];
 }
 
 export interface PresetSample {
