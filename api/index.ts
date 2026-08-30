@@ -7,6 +7,17 @@ dotenv.config();
 const app = express();
 app.use(express.json({ limit: '20mb' }));
 
+// CORS headers for preflight and local dev
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  next();
+});
+
 let aiClient: GoogleGenAI | null = null;
 function getGeminiClient(): GoogleGenAI {
   if (!aiClient) {
@@ -75,6 +86,19 @@ OUTPUT SCHEMA (JSON ONLY):
     "toxicological_note": "ADI threshold note."
   }
 }`;
+
+const CHAT_SYSTEM_INSTRUCTION = `You are FoodWise Clinical Assistant, an expert medical triage & first-aid AI.
+
+CLINICAL INSTRUCTIONS:
+1. When the user reports ANY symptom (e.g. headache, swelling, numbness, rash, chest pain, nausea, injury) or uploads a photo:
+   - **Suspected Condition**: 2-3 most probable clinical etiologies.
+   - **Recommended Specialist**: Exact doctor specialist (e.g., Neurologist, Allergist, ENT, Dermatologist, Orthopedist).
+   - **Immediate First-Aid Protocol**: 3-4 concise, numbered, actionable steps.
+   - **Red-Flag Emergency Triggers**: Clear criteria for seeking immediate emergency care (911 / 112 / ER).
+2. If the user provides a casual greeting (e.g. "hi"), greet them politely and invite them to share their symptom.
+3. If an image is provided, comment directly on observable signs (erythema, localized edema, hives, wound).
+4. For follow-up questions, answer directly in continuous context.
+Keep replies direct, clinically sound, and formatted in clean Markdown.`;
 
 async function fetchOpenFoodFactsProduct(barcode: string) {
   const cleanBarcode = barcode.trim().replace(/[^0-9]/g, '');
@@ -169,7 +193,7 @@ Extract diagnoses and additives to avoid. Reply in JSON matching expected schema
     contentsParts.push({ text: promptText });
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
+      model: 'gemini-2.5-flash',
       contents: { parts: contentsParts },
       config: { responseMimeType: 'application/json', temperature: 0.1 },
     });
@@ -181,6 +205,58 @@ Extract diagnoses and additives to avoid. Reply in JSON matching expected schema
   }
 });
 
+// Real-Time Chat & Multimodal Symptom Triage Route
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { messages } = req.body;
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ error: 'No messages provided' });
+    }
+
+    const ai = getGeminiClient();
+
+    const contents = messages.map((m: any) => {
+      const parts: any[] = [];
+
+      if (m.content) {
+        parts.push({ text: m.content });
+      }
+
+      if (m.image && typeof m.image === 'string' && m.image.includes(',')) {
+        const mimeType = m.image.split(';')[0].replace('data:', '') || 'image/jpeg';
+        const base64Data = m.image.split(',')[1];
+        parts.push({
+          inlineData: {
+            mimeType,
+            data: base64Data,
+          },
+        });
+      }
+
+      return {
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts,
+      };
+    });
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents,
+      config: {
+        systemInstruction: CHAT_SYSTEM_INSTRUCTION,
+        temperature: 0.2,
+      },
+    });
+
+    const reply = response.text || '';
+    return res.json({ reply: reply.trim() });
+  } catch (error: any) {
+    console.error('Chat error in /api/chat:', error);
+    return res.status(500).json({ error: error.message || 'Failed to process chat request.' });
+  }
+});
+
+// Ingredient & Product Safety Scanner Route
 app.post('/api/analyze', async (req, res) => {
   try {
     const { productName, ingredients, image, barcodeInput, userPreferences, healthProfile } = req.body;
@@ -202,10 +278,20 @@ app.post('/api/analyze', async (req, res) => {
     const ai = getGeminiClient();
     let contentsParts: any[] = [];
 
+    // Synthesize full medical profile and all multi-reports
     let healthContextStr = '';
     if (healthProfile) {
+      let reportsSummary = 'None attached';
+      if (Array.isArray(healthProfile.medicalReports) && healthProfile.medicalReports.length > 0) {
+        reportsSummary = healthProfile.medicalReports
+          .map((r: any, idx: number) => `[Report ${idx + 1} - ${r.category || 'Clinical'} (${r.reportDate || 'N/A'})] ${r.title}: ${r.reportText}`)
+          .join('\n');
+      }
+
       healthContextStr = `\nUSER MEDICAL PROFILE:
 Symptoms: "${healthProfile.symptoms || 'None'}"
+Saved Diagnostic Lab Reports:
+${reportsSummary}
 Sensitivities: ${JSON.stringify(healthProfile.medicalReportAnalysis?.diagnosed_sensitivities || [])}
 Additives to Avoid: ${JSON.stringify(healthProfile.medicalReportAnalysis?.additives_to_avoid || [])}`;
     }
@@ -238,7 +324,7 @@ Ingredients: "${offData.ingredientsText || 'N/A'}"`;
     contentsParts.push({ text: promptText });
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
+      model: 'gemini-2.5-flash',
       contents: { parts: contentsParts },
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
