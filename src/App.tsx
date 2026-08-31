@@ -24,10 +24,25 @@ import {
 const STORAGE_KEY_HISTORY = 'nutriscan_ai_saved_scans_v1';
 const STORAGE_KEY_PREFS = 'nutriscan_ai_user_prefs_v1';
 const STORAGE_KEY_USER = 'nutriscan_ai_user_profile_v1';
+const STORAGE_KEY_THEME = 'nutriscan_ai_theme_v1';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'scanner' | 'health-profile' | 'directory' | 'calculator' | 'guide' | 'history'>('scanner');
   
+  // Theme State (Dark / Light Mode)
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    try {
+      const savedTheme = localStorage.getItem(STORAGE_KEY_THEME);
+      if (savedTheme === 'light' || savedTheme === 'dark') return savedTheme;
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+        return 'light';
+      }
+    } catch (e) {
+      console.error('Error loading theme:', e);
+    }
+    return 'dark';
+  });
+
   // User Authentication State
   const [userProfile, setUserProfile] = useState<UserProfile | null>(() => {
     try {
@@ -86,6 +101,31 @@ export default function App() {
     return [];
   });
 
+  // Auto-scroll to top whenever tab changes or scan result is updated
+  useEffect(() => {
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: 'instant'
+    });
+  }, [activeTab, analysisResult]);
+
+  // Sync theme to localStorage and HTML root element
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_THEME, theme);
+      if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
+      } else {
+        document.documentElement.classList.add('light');
+        document.documentElement.classList.remove('dark');
+      }
+    } catch (e) {
+      console.error('Error saving theme:', e);
+    }
+  }, [theme]);
+
   useEffect(() => {
     try {
       if (userProfile) {
@@ -113,6 +153,10 @@ export default function App() {
       console.error('Error saving history to localStorage:', e);
     }
   }, [savedScans]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  };
 
   const handleLoginSuccess = (profile: UserProfile) => {
     setUserProfile(profile);
@@ -279,7 +323,11 @@ Ingredient Text Provided: ${ingredientInput || 'Extract from uploaded image'}
       setAnalysisResult(completeResult);
     } catch (err: any) {
       console.error('Analysis error:', err);
-      setErrorMsg(err.message || 'Failed to complete FoodWise AI analysis. Please check your connection or try again.');
+      if (err?.message?.includes('429') || err?.message?.includes('RESOURCE_EXHAUSTED')) {
+        setErrorMsg('⏳ AI rate limit reached. Please wait ~45 seconds and try again.');
+      } else {
+        setErrorMsg(err.message || 'Failed to complete FoodWise AI analysis. Please check your connection or try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -291,6 +339,7 @@ Ingredient Text Provided: ${ingredientInput || 'Extract from uploaded image'}
     setSelectedImage(sample.sampleImage || null);
     setAnalysisResult(null);
     setErrorMsg(null);
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   };
 
   const handleResetScan = () => {
@@ -300,6 +349,7 @@ Ingredient Text Provided: ${ingredientInput || 'Extract from uploaded image'}
     setBarcodeInput('');
     setSelectedImage(null);
     setErrorMsg(null);
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   };
 
   const handleSaveScan = (result: NutriScanResult) => {
@@ -323,6 +373,7 @@ Ingredient Text Provided: ${ingredientInput || 'Extract from uploaded image'}
   const handleLoadSavedScan = (scan: NutriScanResult) => {
     setAnalysisResult(scan);
     setActiveTab('scanner');
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   };
 
   const isCurrentScanSaved = Boolean(
@@ -341,8 +392,12 @@ Ingredient Text Provided: ${ingredientInput || 'Extract from uploaded image'}
     return <AuthScreen onLoginSuccess={handleLoginSuccess} />;
   }
 
+  const isDark = theme === 'dark';
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col selection:bg-emerald-500/30 selection:text-emerald-300">
+    <div className={`min-h-screen font-sans flex flex-col transition-colors duration-200 selection:bg-emerald-500/30 selection:text-emerald-300 ${
+      isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'
+    }`}>
       {/* Top Header Navbar */}
       <Navbar
         activeTab={activeTab}
@@ -354,24 +409,42 @@ Ingredient Text Provided: ${ingredientInput || 'Extract from uploaded image'}
         onLogout={handleLogout}
       />
 
-      {/* Disclaimer Banner */}
-      <div className="bg-slate-900/90 border-b border-slate-800 py-2.5 px-4 text-xs">
+      {/* Top Control Banner with Theme Toggle */}
+      <div className={`border-b py-2.5 px-4 text-xs transition-colors ${
+        isDark ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+      }`}>
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-          <div className="flex items-center space-x-2 text-slate-300">
-            <span className="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[10px]">
+          <div className="flex items-center space-x-2">
+            <span className="bg-emerald-500/20 text-emerald-500 px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[10px]">
               Scientific Framework
             </span>
-            <span>Personalised Food Suitability & Allergen Screening Standard</span>
+            <span className={isDark ? 'text-slate-300' : 'text-slate-600 font-medium'}>
+              Personalised Food Suitability & Allergen Screening Standard
+            </span>
           </div>
           
           <div className="flex items-center gap-2">
+            {/* Theme Toggle Button */}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all active:scale-95 cursor-pointer ${
+                isDark 
+                  ? 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700' 
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300'
+              }`}
+              title={`Switch to ${isDark ? 'Light' : 'Dark'} Mode`}
+            >
+              <span>{isDark ? '☀️ Light Mode' : '🌙 Dark Mode'}</span>
+            </button>
+
             <button 
               type="button"
               onClick={() => setShowEthicalBoard(!showEthicalBoard)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg shadow-sm transition-all hover:border-emerald-500/60 active:scale-95 cursor-pointer flex-shrink-0"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg shadow-sm transition-all hover:border-emerald-500/60 active:scale-95 cursor-pointer flex-shrink-0"
             >
               <span>📋</span>
-              <span>{showEthicalBoard ? 'Hide Exhibition Board Rules' : 'View Ethical & Safety Framework'}</span>
+              <span>{showEthicalBoard ? 'Hide Exhibition Board Rules' : 'View Safety Framework'}</span>
             </button>
           </div>
         </div>
@@ -379,24 +452,30 @@ Ingredient Text Provided: ${ingredientInput || 'Extract from uploaded image'}
 
       {/* Exhibition Board Panel */}
       {showEthicalBoard && (
-        <div className="bg-slate-900 border-b border-emerald-500/30 p-5 text-sm">
+        <div className={`border-b p-5 text-sm ${
+          isDark ? 'bg-slate-900 border-emerald-500/30' : 'bg-slate-100 border-emerald-500/40'
+        }`}>
           <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-rose-950/30 border border-rose-500/30 rounded-xl p-4">
-              <h4 className="font-bold text-rose-400 text-base mb-2 flex items-center gap-2">
+            <div className={`border rounded-xl p-4 ${
+              isDark ? 'bg-rose-950/30 border-rose-500/30 text-slate-300' : 'bg-rose-50 border-rose-300 text-rose-950'
+            }`}>
+              <h4 className="font-bold text-rose-500 text-base mb-2 flex items-center gap-2">
                 ❌ FOODWISE DOES NOT:
               </h4>
-              <ul className="space-y-1.5 text-slate-300 text-xs list-disc pl-5">
+              <ul className="space-y-1.5 text-xs list-disc pl-5">
                 <li>Diagnose medical conditions or food allergies.</li>
                 <li>Replace a licensed doctor, nutritionist, or dietitian.</li>
                 <li>Guarantee that a food product is 100% safe for all individuals.</li>
                 <li>Declare ingredients "toxic" without toxicological evidence (NOAEL/ADI).</li>
               </ul>
             </div>
-            <div className="bg-emerald-950/30 border border-emerald-500/30 rounded-xl p-4">
-              <h4 className="font-bold text-emerald-400 text-base mb-2 flex items-center gap-2">
+            <div className={`border rounded-xl p-4 ${
+              isDark ? 'bg-emerald-950/30 border-emerald-500/30 text-slate-300' : 'bg-emerald-50 border-emerald-300 text-emerald-950'
+            }`}>
+              <h4 className="font-bold text-emerald-600 text-base mb-2 flex items-center gap-2">
                 ✅ FOODWISE DOES:
               </h4>
-              <ul className="space-y-1.5 text-slate-300 text-xs list-disc pl-5">
+              <ul className="space-y-1.5 text-xs list-disc pl-5">
                 <li>Calculate a Personalised Food Suitability Score based on context.</li>
                 <li>Highlight potential allergens and "may contain traces of" cross-contamination.</li>
                 <li>Explain nutritional information and food label codes objectively.</li>
@@ -502,14 +581,16 @@ Ingredient Text Provided: ${ingredientInput || 'Extract from uploaded image'}
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-800/80 bg-slate-900/60 py-6 text-center text-xs text-slate-400">
+      <footer className={`border-t py-6 text-center text-xs transition-colors ${
+        isDark ? 'border-slate-800/80 bg-slate-900/60 text-slate-400' : 'border-slate-200 bg-white text-slate-600'
+      }`}>
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center space-x-2">
-            <span className="font-bold text-slate-200">FoodWise / NutriScan AI</span>
+            <span className={`font-bold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>FoodWise / NutriScan AI</span>
             <span>•</span>
             <span>Scientific Food Additive & Suitability Engine</span>
           </div>
-          <div className="text-slate-400">
+          <div>
             FSSAI (India) • FDA (USA) • EFSA (EU) Reference Standards
           </div>
         </div>
