@@ -12,7 +12,7 @@ import { CameraModal } from './components/CameraModal';
 import { AdditiveDetailModal } from './components/AdditiveDetailModal';
 import { PreferencesModal } from './components/PreferencesModal';
 import { HealthChatbot } from './components/HealthChatbot';
-import { GoogleGenAI } from '@google/genai';
+import { generateContentWithKeyFallback, safeExtractJson } from './services/gemini';
 import { 
   NutriScanResult, 
   AdditiveItem, 
@@ -25,11 +25,36 @@ const STORAGE_KEY_HISTORY = 'nutriscan_ai_saved_scans_v1';
 const STORAGE_KEY_PREFS = 'nutriscan_ai_user_prefs_v1';
 const STORAGE_KEY_USER = 'nutriscan_ai_user_profile_v1';
 const STORAGE_KEY_THEME = 'nutriscan_ai_theme_v1';
+const STORAGE_KEY_CACHE = 'nutriscan_ai_barcode_cache_v1';
+
+// Direct Fast Lookup for Standard Indian FMCG Barcodes
+const LOCAL_INDIAN_BARCODES: Record<string, { name: string; brand: string; ingredients: string; isNonFood?: boolean }> = {
+  '8901030986017': {
+    name: 'Horlicks Classic Malt Health Drink',
+    brand: 'Hindustan Unilever Limited (HUL)',
+    ingredients: 'Malted Barley, Wheat Flour, Milk Solids, Sugar, Minerals, Salt, Acidity Regulators (INS 501(ii), INS 500(ii)), Vitamins, Natural Colour.'
+  },
+  '8901972058629': {
+    name: 'Dukes Waffy Chocolate Flavoured Wafers',
+    brand: 'Dukes (Ravi Foods)',
+    ingredients: 'Refined Wheat Flour (Maida), Sugar, Hydrogenated Vegetable Oil, Cocoa Solids, Emulsifier (INS 322), Leavening Agents (INS 500(ii), INS 503(ii)), Salt.'
+  },
+  '8901491101837': {
+    name: 'Kurkure Masala Munch',
+    brand: 'PepsiCo India',
+    ingredients: 'Rice Meal, Edible Vegetable Oil (Palmolein Oil), Corn Meal, Gram Meal, Spices and Condiments, Salt, Acidity Regulator (INS 330), Flavour Enhancers (INS 627, INS 631).'
+  },
+  '8901063012486': {
+    name: 'Britannia Bourbon The Original Chocolate Biscuits',
+    brand: 'Britannia Industries',
+    ingredients: 'Refined Wheat Flour, Sugar, Palm Oil, Cocoa Solids, Invert Sugar Syrup, Raising Agents (INS 500(ii), INS 503(ii)), Emulsifier (INS 322).'
+  }
+};
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'scanner' | 'health-profile' | 'directory' | 'calculator' | 'guide' | 'history'>('scanner');
   
-  // Theme State (Dark / Light Mode)
+  // Theme State
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     try {
       const savedTheme = localStorage.getItem(STORAGE_KEY_THEME);
@@ -43,7 +68,7 @@ export default function App() {
     return 'dark';
   });
 
-  // User Authentication State
+  // User Profile State
   const [userProfile, setUserProfile] = useState<UserProfile | null>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_USER);
@@ -54,7 +79,7 @@ export default function App() {
     return null;
   });
 
-  // Scanner state
+  // Scanner Form State
   const [productNameInput, setProductNameInput] = useState<string>('');
   const [ingredientInput, setIngredientInput] = useState<string>('');
   const [barcodeInput, setBarcodeInput] = useState<string>('');
@@ -62,17 +87,17 @@ export default function App() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Analysis result state
+  // Analysis Result State
   const [analysisResult, setAnalysisResult] = useState<NutriScanResult | null>(null);
 
-  // Modals state
+  // Modals & Panels State
   const [isCameraOpen, setIsCameraOpen] = useState<boolean>(false);
   const [cameraMode, setCameraMode] = useState<'label' | 'barcode'>('barcode');
   const [selectedAdditiveModal, setSelectedAdditiveModal] = useState<AdditiveItem | null>(null);
   const [isPrefsOpen, setIsPrefsOpen] = useState<boolean>(false);
   const [showEthicalBoard, setShowEthicalBoard] = useState<boolean>(false);
 
-  // User health preferences state
+  // User Health Preferences State
   const [userPreferences, setUserPreferences] = useState<UserPreferences>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_PREFS);
@@ -90,7 +115,7 @@ export default function App() {
     };
   });
 
-  // Saved history state
+  // Saved Scan History State
   const [savedScans, setSavedScans] = useState<NutriScanResult[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_HISTORY);
@@ -101,7 +126,6 @@ export default function App() {
     return [];
   });
 
-  // Auto-scroll to top whenever tab changes or scan result is updated
   useEffect(() => {
     window.scrollTo({
       top: 0,
@@ -110,7 +134,6 @@ export default function App() {
     });
   }, [activeTab, analysisResult]);
 
-  // Sync theme to localStorage and HTML root element
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_THEME, theme);
@@ -182,13 +205,87 @@ export default function App() {
     setErrorMsg(null);
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
-      if (!apiKey) {
-        throw new Error('VITE_GEMINI_API_KEY is not configured in your environment or .env file.');
+      const trimmedBarcode = barcodeInput.trim();
+      const trimmedProductName = productNameInput.trim();
+      const cacheKey = trimmedBarcode
+        ? `barcode_${trimmedBarcode}`
+        : trimmedProductName
+        ? `product_${trimmedProductName.toLowerCase()}`
+        : '';
+
+      // Check Local Cache
+      if (cacheKey && !selectedImage) {
+        try {
+          const cachedMap = JSON.parse(localStorage.getItem(STORAGE_KEY_CACHE) || '{}');
+          if (cachedMap[cacheKey]) {
+            setAnalysisResult({
+              ...cachedMap[cacheKey],
+              id: `scan-${Date.now()}`,
+              timestamp: new Date().toISOString()
+            });
+            setIsLoading(false);
+            return;
+          }
+        } catch (e) {
+          console.warn('Cache read bypass:', e);
+        }
       }
 
-      const ai = new GoogleGenAI({ apiKey });
+      // Step 1: Resolve Barcode via Local FMCG Map -> OpenFoodFacts -> OpenBeautyFacts
+      let fetchedIngredients = ingredientInput.trim();
+      let fetchedProductName = trimmedProductName;
+      let fetchedBrand = '';
+      let offImageUrl = '';
+      let offMatched = false;
 
+      if (trimmedBarcode) {
+        if (LOCAL_INDIAN_BARCODES[trimmedBarcode]) {
+          const localItem = LOCAL_INDIAN_BARCODES[trimmedBarcode];
+          fetchedProductName = localItem.name;
+          fetchedBrand = localItem.brand;
+          fetchedIngredients = localItem.ingredients;
+          offMatched = true;
+        } else {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+            let offRes = await fetch(
+              `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(trimmedBarcode)}.json`,
+              { signal: controller.signal }
+            );
+            let offData = offRes.ok ? await offRes.json() : null;
+
+            if (!offData || offData.status !== 1 || !offData.product) {
+              const beautyRes = await fetch(
+                `https://world.openbeautyfacts.org/api/v2/product/${encodeURIComponent(trimmedBarcode)}.json`,
+                { signal: controller.signal }
+              );
+              if (beautyRes.ok) {
+                const beautyData = await beautyRes.json();
+                if (beautyData.status === 1 && beautyData.product) {
+                  offData = beautyData;
+                }
+              }
+            }
+
+            clearTimeout(timeoutId);
+
+            if (offData && offData.status === 1 && offData.product) {
+              offMatched = true;
+              const p = offData.product;
+              fetchedProductName = p.product_name || p.product_name_en || p.generic_name || fetchedProductName;
+              fetchedBrand = p.brands || (Array.isArray(p.brands_tags) ? p.brands_tags.join(', ') : '') || '';
+              fetchedIngredients = p.ingredients_text || p.ingredients_text_en || fetchedIngredients;
+              offImageUrl = p.image_url || p.image_front_url || p.image_small_url || '';
+            }
+          } catch (offErr) {
+            console.warn('Database lookups bypassed or timed out.');
+          }
+        }
+      }
+
+      // Step 2: Gemini Prompting
       const activeReportsContext = userProfile?.medicalReports
         ? userProfile.medicalReports.map((r, i) => `Report ${i + 1} (${r.title}): ${r.reportText}`).join('; ')
         : 'None recorded';
@@ -198,46 +295,67 @@ export default function App() {
         : (userProfile?.symptoms || 'None specified');
 
       const systemPrompt = `
-You are FoodWise AI, an expert food additive toxicologist, clinical nutritionist, and regulatory food safety assessor (EFSA, US FDA, FSSAI India).
+You are FoodWise AI, an expert food safety toxicologist, regulatory specialist (FSSAI, US FDA, EFSA), and clinical dietitian.
 
-Analyze the submitted food product, ingredients list, barcode, or package photo against the user's health profile:
-- Patient Active Symptoms & Allergies: ${userSensitivitiesContext}
-- Patient Medical Reports / Lab Diagnostics: ${activeReportsContext}
-- Active Preference Flags: ${JSON.stringify(userPreferences)}
+Analyze the scanned food product:
+- Barcode Number: ${trimmedBarcode || 'N/A'}
+- Scanned Product Name: "${fetchedProductName || 'Identify accurately from barcode/database'}"
+- Scanned Brand: "${fetchedBrand || 'Identify accurately from barcode/database'}"
+- Scanned Ingredients: "${fetchedIngredients || 'Reconstruct real commercial ingredient formulation based on barcode and product'}"
+- Patient Symptoms & Allergies: ${userSensitivitiesContext}
+- Patient Medical Reports: ${activeReportsContext}
+- Dietary Preferences: ${JSON.stringify(userPreferences)}
 
-Return ONLY valid JSON matching this schema:
+CRITICAL INSTRUCTIONS:
+1. Identify the EXACT real-world product (e.g. "Horlicks Classic Malt Health Drink", "Dukes Waffy Chocolate Flavored Wafers", "Kurkure Masala Munch", etc.). NEVER return placeholder words like "Product" or "Identified Manufacturer".
+2. If non-food (personal care/cosmetic), state this clearly in the summary and evaluate cosmetic ingredients.
+3. Extract ALL relevant food additives with their INS / E numbers (e.g., INS 322, INS 150d, INS 500ii, INS 503ii, INS 330, INS 621, etc.). Include at least 3-6 individual detected additives typical of this product category.
+4. For EVERY additive detected, provide its functional class, safety rating, biological mechanism, and health note.
+5. Output STRICT JSON matching this schema:
 {
   "scan_data": {
-    "detected_product_name": "Product Name",
-    "brand_name": "Brand Name or Unknown",
-    "barcode_detected": false,
-    "barcode_number": "",
-    "openfoodfacts_matched": false
+    "detected_product_name": "Accurate Real Product Name",
+    "brand_name": "Accurate Real Brand Name",
+    "barcode_detected": ${Boolean(trimmedBarcode)},
+    "barcode_number": "${trimmedBarcode}",
+    "openfoodfacts_matched": ${offMatched}
   },
   "product_info": {
-    "total_additives_found": 1
+    "total_additives_found": 4
   },
   "overall_analysis": {
-    "health_summary": "Comprehensive clinical evaluation of product ingredients.",
-    "key_warnings": ["Warning 1", "Warning 2"],
-    "toxicological_note": "ADI / NOAEL safety guidance note."
+    "health_summary": "Comprehensive 3-sentence clinical and nutritional evaluation of the product ingredients.",
+    "key_warnings": [
+      "High refined sugar or malt content",
+      "Contains potential allergen triggers (Gluten, Milk solids)"
+    ],
+    "toxicological_note": "Evaluated against FSSAI and EFSA Acceptable Daily Intake (ADI) benchmarks."
   },
   "additives_detected": [
     {
-      "ins_e_number": "INS 621 / E621",
-      "name": "Monosodium Glutamate",
-      "functional_class": "Flavor Enhancer",
-      "safety_rating": "Caution",
-      "biological_mechanism": "Glutamate receptor activation",
-      "description": "Short explanation of health impact.",
+      "ins_e_number": "INS 500(ii)",
+      "name": "Sodium Bicarbonate",
+      "functional_class": "Acidity Regulator / Raising Agent",
+      "safety_rating": "Safe",
+      "biological_mechanism": "Buffers pH and releases carbon dioxide.",
+      "description": "Common mineral salt used to balance acidity in beverage formulations.",
+      "regulatory_status": "Approved by FSSAI, US FDA (GRAS), EFSA"
+    },
+    {
+      "ins_e_number": "INS 501(ii)",
+      "name": "Potassium Bicarbonate",
+      "functional_class": "Acidity Regulator",
+      "safety_rating": "Safe",
+      "biological_mechanism": "Maintains optimal pH stability and electrolyte balance.",
+      "description": "Permitted mineral stabilizer.",
       "regulatory_status": "Approved by FSSAI, FDA, EFSA"
     }
   ],
   "allergen_alert": {
     "detected": false,
-    "allergen_name": "",
-    "warning_type": "",
-    "message": ""
+    "allergen_name": "Barley / Gluten / Milk",
+    "warning_type": "Ingredient Watch",
+    "message": "Contains malted barley, wheat flour, and milk solids. Not suitable for individuals with celiac disease or severe lactose intolerance."
   }
 }
 `;
@@ -255,49 +373,32 @@ Return ONLY valid JSON matching this schema:
       }
 
       const textPayload = `
-Product Name / Brand: ${productNameInput || 'Unspecified'}
-Barcode: ${barcodeInput || 'Unspecified'}
-Ingredient Text Provided: ${ingredientInput || 'Extract from uploaded image'}
+Barcode: ${trimmedBarcode || 'N/A'}
+Product: ${fetchedProductName || productNameInput || 'Determine from barcode'}
+Brand: ${fetchedBrand || 'Determine from barcode'}
+Ingredients: ${fetchedIngredients || 'Reconstruct ingredients from known formulation'}
 `;
       parts.push({ text: textPayload });
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: [
-          {
-            role: 'user',
-            parts,
-          },
-        ],
-        config: {
-          systemInstruction: systemPrompt,
-          responseMimeType: 'application/json',
-          temperature: 0.2,
-        },
-      });
+      // Step 3: Run AI and Extract JSON Safely
+      const rawText = await generateContentWithKeyFallback(systemPrompt, parts);
+      const parsedData = safeExtractJson(rawText);
 
-      const rawText = response.text || '{}';
-      const sanitizedText = rawText.replace(/```json\n?|```/g, '').trim();
-      let parsedData: any = {};
-      try {
-        parsedData = JSON.parse(sanitizedText);
-      } catch (jsonErr) {
-        console.error('Failed to parse Gemini JSON:', rawText);
-        throw new Error('Received unexpected format from AI. Please try again.');
-      }
+      const finalProductName = parsedData.scan_data?.detected_product_name || fetchedProductName || productNameInput || 'Scanned Food Product';
+      const finalBrandName = parsedData.scan_data?.brand_name || fetchedBrand || '';
 
-      // Safe normalization ensures all properties needed by AnalysisResults.tsx are guaranteed to exist
       const completeResult: NutriScanResult = {
         ...parsedData,
         id: `scan-${Date.now()}`,
         timestamp: new Date().toISOString(),
-        product_name: parsedData.scan_data?.detected_product_name || productNameInput || 'Scanned Food Product',
+        off_image_url: offImageUrl || undefined,
+        product_name: finalProductName,
         scan_data: {
-          detected_product_name: parsedData.scan_data?.detected_product_name || productNameInput || 'Scanned Food Product',
-          brand_name: parsedData.scan_data?.brand_name || '',
-          barcode_detected: Boolean(barcodeInput || parsedData.scan_data?.barcode_detected),
-          barcode_number: barcodeInput || parsedData.scan_data?.barcode_number || '',
-          openfoodfacts_matched: Boolean(parsedData.scan_data?.openfoodfacts_matched),
+          detected_product_name: finalProductName,
+          brand_name: finalBrandName,
+          barcode_detected: Boolean(trimmedBarcode || parsedData.scan_data?.barcode_detected),
+          barcode_number: trimmedBarcode || parsedData.scan_data?.barcode_number || '',
+          openfoodfacts_matched: Boolean(offMatched || parsedData.scan_data?.openfoodfacts_matched),
         },
         product_info: {
           total_additives_found: Array.isArray(parsedData.additives_detected)
@@ -310,21 +411,32 @@ Ingredient Text Provided: ${ingredientInput || 'Extract from uploaded image'}
           toxicological_note: parsedData.overall_analysis?.toxicological_note || 'Consume in moderation according to dietary guidance.',
         },
         additives_detected: Array.isArray(parsedData.additives_detected) ? parsedData.additives_detected : [],
-        raw_ingredients_text: ingredientInput || productNameInput || barcodeInput || 'Image Scan',
+        raw_ingredients_text: fetchedIngredients || ingredientInput || productNameInput || trimmedBarcode || 'Image Scan',
         image_preview: selectedImage || undefined,
-        allergen_alert: {
-          detected: Boolean(parsedData.allergen_alert?.detected),
-          allergen_name: parsedData.allergen_alert?.allergen_name || '',
-          warning_type: parsedData.allergen_alert?.warning_type || '',
-          message: parsedData.allergen_alert?.message || ''
+        allergen_alert: parsedData.allergen_alert || {
+          detected: false,
+          allergen_name: '',
+          warning_type: '',
+          message: ''
         },
       };
+
+      // Save to local cache
+      if (cacheKey && !selectedImage) {
+        try {
+          const cachedMap = JSON.parse(localStorage.getItem(STORAGE_KEY_CACHE) || '{}');
+          cachedMap[cacheKey] = completeResult;
+          localStorage.setItem(STORAGE_KEY_CACHE, JSON.stringify(cachedMap));
+        } catch (e) {
+          console.warn('Cache write bypass:', e);
+        }
+      }
 
       setAnalysisResult(completeResult);
     } catch (err: any) {
       console.error('Analysis error:', err);
       if (err?.message?.includes('429') || err?.message?.includes('RESOURCE_EXHAUSTED')) {
-        setErrorMsg('⏳ AI rate limit reached. Please wait ~45 seconds and try again.');
+        setErrorMsg('⏳ All AI quota limits reached for today. Add a fallback key in Vercel to continue.');
       } else {
         setErrorMsg(err.message || 'Failed to complete FoodWise AI analysis. Please check your connection or try again.');
       }
@@ -387,7 +499,6 @@ Ingredient Text Provided: ${ingredientInput || 'Extract from uploaded image'}
     }).length
   );
 
-  // Initial Mandatory Gate: Patient Sign-in / Intake Screen
   if (!userProfile || !userProfile.isLoggedIn) {
     return <AuthScreen onLoginSuccess={handleLoginSuccess} />;
   }
@@ -409,7 +520,7 @@ Ingredient Text Provided: ${ingredientInput || 'Extract from uploaded image'}
         onLogout={handleLogout}
       />
 
-      {/* Top Control Banner with Theme Toggle */}
+      {/* Control Banner with Theme Toggle */}
       <div className={`border-b py-2.5 px-4 text-xs transition-colors ${
         isDark ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
       }`}>
@@ -424,7 +535,6 @@ Ingredient Text Provided: ${ingredientInput || 'Extract from uploaded image'}
           </div>
           
           <div className="flex items-center gap-2">
-            {/* Theme Toggle Button */}
             <button
               type="button"
               onClick={toggleTheme}
@@ -444,13 +554,13 @@ Ingredient Text Provided: ${ingredientInput || 'Extract from uploaded image'}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg shadow-sm transition-all hover:border-emerald-500/60 active:scale-95 cursor-pointer flex-shrink-0"
             >
               <span>📋</span>
-              <span>{showEthicalBoard ? 'Hide Exhibition Board Rules' : 'View Safety Framework'}</span>
+              <span>{showEthicalBoard ? 'Hide Framework Rules' : 'View Safety Framework'}</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* Exhibition Board Panel */}
+      {/* Ethical Framework Panel */}
       {showEthicalBoard && (
         <div className={`border-b p-5 text-sm ${
           isDark ? 'bg-slate-900 border-emerald-500/30' : 'bg-slate-100 border-emerald-500/40'
@@ -486,7 +596,7 @@ Ingredient Text Provided: ${ingredientInput || 'Extract from uploaded image'}
         </div>
       )}
 
-      {/* Error Alert Toast */}
+      {/* Error Toast */}
       {errorMsg && (
         <div className="max-w-5xl mx-auto px-4 mt-4 w-full">
           <div className="bg-rose-950/80 border border-rose-500/40 rounded-xl p-4 flex items-center justify-between text-rose-200 text-sm shadow-xl">
@@ -501,7 +611,7 @@ Ingredient Text Provided: ${ingredientInput || 'Extract from uploaded image'}
         </div>
       )}
 
-      {/* Main Content Workspace Area */}
+      {/* Main Workspace */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 pb-32 md:pb-8">
         {analysisResult?.allergen_alert?.detected && (
           <div className="mb-6 bg-red-950/90 border-2 border-red-500 text-red-100 p-5 rounded-2xl shadow-2xl animate-pulse">
@@ -596,7 +706,7 @@ Ingredient Text Provided: ${ingredientInput || 'Extract from uploaded image'}
         </div>
       </footer>
 
-      {/* Health & First Aid Floating Chatbot */}
+      {/* Floating Chatbot */}
       <HealthChatbot />
 
       {/* Camera Capture Modal */}
