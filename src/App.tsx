@@ -570,7 +570,7 @@ Ingredients: ${fetchedIngredients || 'Reconstruct ingredients from known formula
               isDark ? 'bg-rose-950/30 border-rose-500/30 text-slate-300' : 'bg-rose-50 border-rose-300 text-rose-950'
             }`}>
               <h4 className="font-bold text-rose-500 text-base mb-2 flex items-center gap-2">
-                ❌ FOODWISE DOES NOT:
+                ❌ FOODSENSE DOES NOT:
               </h4>
               <ul className="space-y-1.5 text-xs list-disc pl-5">
                 <li>Diagnose medical conditions or food allergies.</li>
@@ -583,7 +583,7 @@ Ingredients: ${fetchedIngredients || 'Reconstruct ingredients from known formula
               isDark ? 'bg-emerald-950/30 border-emerald-500/30 text-slate-300' : 'bg-emerald-50 border-emerald-300 text-emerald-950'
             }`}>
               <h4 className="font-bold text-emerald-600 text-base mb-2 flex items-center gap-2">
-                ✅ FOODWISE DOES:
+                ✅ FOODSENSE DOES:
               </h4>
               <ul className="space-y-1.5 text-xs list-disc pl-5">
                 <li>Calculate a Personalised Food Suitability Score based on context.</li>

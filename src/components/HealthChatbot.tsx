@@ -25,7 +25,7 @@ interface Message {
   timestamp: string;
 }
 
-const STORAGE_KEY_CHAT = 'foodwise_ai_chat_history_v11';
+const STORAGE_KEY_CHAT = 'foodsense_ai_chat_history_v11';
 
 const QUICK_CHIPS = [
   '🚨 Allergic Reaction / Hives',
@@ -95,7 +95,7 @@ export const HealthChatbot: React.FC = () => {
 Patient Health Profile Context:
 - Patient Name: ${parsed.name || 'User'}
 - Diagnosed Sensitivities / Allergies: ${Array.isArray(parsed.symptoms) ? parsed.symptoms.join(', ') : (parsed.symptoms || 'None')}
-- Medical Records / Diagnostic Reports: ${parsed.medicalReports?.map((r: any) => `${r.title}: ${r.reportText}`).join('; ') || 'None'}
+- Medical Records / Diagnostic Reports: ${parsed.medicalReports?.map((r: any) => `${r.title}:${r.reportText}`).join('; ') || 'None'}
 `;
       }
     } catch (e) {
@@ -103,7 +103,7 @@ Patient Health Profile Context:
     }
 
     const systemInstruction = `
-You are FoodWise Clinical AI, an expert medical triage assistant, clinical nutritionist, toxicologist, and first-aid guide.
+You are FoodSense Clinical AI, an expert medical triage assistant, clinical nutritionist, toxicologist, and first-aid guide.
 
 Core Guidelines:
 1. **Medical & Nutrition Expertise**: Provide clear, accurate clinical insights for food additive reactions, dietary restrictions, allergic manifestations (urticaria, contact dermatitis, erythema), and toxicological ADI benchmarks.
@@ -211,7 +211,7 @@ ${profileContext}
         onClick={() => setIsOpen(true)}
         className="fixed bottom-20 md:bottom-6 right-4 z-40 w-12 h-12 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 rounded-full shadow-xl shadow-emerald-500/25 flex items-center justify-center active:scale-90 transition-all cursor-pointer group"
         aria-label="Open Health Assistant"
-        title="Open FoodWise Clinical Assistant"
+        title="Open FoodSense Clinical Assistant"
       >
         <Bot className="w-6 h-6 transition-transform group-hover:scale-110" />
       </button>
@@ -229,10 +229,11 @@ ${profileContext}
                 </div>
                 <div>
                   <h3 className="text-sm font-extrabold text-white flex items-center gap-1.5">
-                    FoodWise Clinical AI
+                    FoodSense Clinical AI
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 flex items-center gap-1 font-bold">
                       <ShieldCheck className="w-3 h-3" /> Multi-Key Active
                     </span>
+                    <Sparkles className="w-3 h-3 text-amber-400" />
                   </h3>
                   <p className="text-[11px] text-slate-400">Symptom evaluation, photo triage & first aid</p>
                 </div>

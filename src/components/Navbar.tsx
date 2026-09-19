@@ -63,7 +63,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
               <div>
                 <span className="text-lg font-extrabold text-white tracking-tight flex items-center gap-1.5">
-                  FoodWise <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">AI</span>
+                  FoodSense <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">AI</span>
                 </span>
                 <span className="text-[10px] text-slate-400 block -mt-1 font-medium hidden sm:block">Food Additive & Allergen Engine</span>
               </div>
