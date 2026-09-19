@@ -438,7 +438,7 @@ Ingredients: ${fetchedIngredients || 'Reconstruct ingredients from known formula
       if (err?.message?.includes('429') || err?.message?.includes('RESOURCE_EXHAUSTED')) {
         setErrorMsg('⏳ All AI quota limits reached for today. Add a fallback key in Vercel to continue.');
       } else {
-        setErrorMsg(err.message || 'Failed to complete FoodWise AI analysis. Please check your connection or try again.');
+        setErrorMsg(err.message || 'Failed to complete FoodSense AI analysis. Please check your connection or try again.');
       }
     } finally {
       setIsLoading(false);
@@ -696,7 +696,7 @@ Ingredients: ${fetchedIngredients || 'Reconstruct ingredients from known formula
       }`}>
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center space-x-2">
-            <span className={`font-bold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>FoodWise / NutriScan AI</span>
+            <span className={`font-bold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>FoodSense AI</span>
             <span>•</span>
             <span>Scientific Food Additive & Suitability Engine</span>
           </div>

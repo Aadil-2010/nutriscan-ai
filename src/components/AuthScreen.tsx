@@ -194,7 +194,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
           <div className="w-14 h-14 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl flex items-center justify-center text-emerald-400 mx-auto shadow-lg shadow-emerald-500/10">
             <Stethoscope className="w-7 h-7" />
           </div>
-          <h1 className="text-2xl font-black text-white tracking-tight">FoodWise Clinical</h1>
+          <h1 className="text-2xl font-black text-white tracking-tight">FoodSense Clinical</h1>
           <p className="text-xs text-slate-400">
             {tab === 'register' 
               ? 'Create a cloud health account accessible across all devices' 
