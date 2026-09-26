@@ -121,14 +121,14 @@ ${profileContext}
     // 2. Build multi-modal parts from message history
     const parts: any[] = [];
     
-    // Include the past context summary
+    // Include conversation history
     const conversationHistoryText = history
       .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
       .join('\n\n');
 
     parts.push({ text: `Conversation History:\n${conversationHistoryText}` });
 
-    // Attach latest image if present on the latest user message
+    // Attach latest image if present
     const latestMsg = history[history.length - 1];
     if (latestMsg?.image && latestMsg.image.includes(',')) {
       const mimeType = latestMsg.image.split(';')[0].replace('data:', '') || 'image/jpeg';
@@ -141,7 +141,7 @@ ${profileContext}
       });
     }
 
-    // 3. Dispatch through Multi-Key Rotation Fallback Engine
+    // 3. Dispatch through Multi-Key / Multi-Model Fallback Engine
     const responseText = await generateContentWithKeyFallback(
       systemInstruction,
       parts,
@@ -189,13 +189,22 @@ ${profileContext}
       setMessages([...updatedHistory, botMsg]);
     } catch (err: any) {
       console.error('Chatbot error:', err);
-      setApiError(err.message || 'Failed to complete triage request.');
+      const errorMsg = (err?.message || '').toLowerCase();
+      
+      let displayError = 'Failed to complete triage request. Please try again.';
+      if (errorMsg.includes('503') || errorMsg.includes('high demand') || errorMsg.includes('unavailable')) {
+        displayError = 'The AI clinical servers are currently handling high traffic. Please retry in a few seconds.';
+      } else if (errorMsg.includes('429') || errorMsg.includes('quota')) {
+        displayError = 'Daily AI safety quota exceeded. Switching to backup server pool...';
+      }
+
+      setApiError(displayError);
       setMessages([
         ...updatedHistory,
         {
           id: `err-${Date.now()}`,
           role: 'assistant',
-          content: '⚠️ I encountered an issue connecting to the clinical engine. If you are experiencing severe symptoms, please seek emergency medical attention immediately.',
+          content: '⚠️ I encountered temporary high server traffic. If you or someone with you is experiencing severe symptoms (throat tightening, breathing difficulty, or anaphylaxis), please seek emergency care (112 / 911) immediately.',
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ]);

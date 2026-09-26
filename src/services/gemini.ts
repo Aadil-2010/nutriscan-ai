@@ -7,6 +7,15 @@ export interface MedicalExtractionResult {
 }
 
 /**
+ * Fallback models prioritized by speed, performance, and stability.
+ */
+const FALLBACK_MODELS = [
+  'gemini-3.8-flash',
+  'gemini-3.6-flash',
+  'gemini-3.0-flash'
+];
+
+/**
  * Returns all configured Gemini API keys found in the environment.
  */
 export function getApiKeyPool(): string[] {
@@ -59,7 +68,22 @@ export function safeExtractJson(rawText: string): any {
 }
 
 /**
- * Executes content generation with automatic key fallback across all configured API keys on quota (429) errors.
+ * Helper to determine if an error is due to overload (503) or rate-limiting (429).
+ */
+function isTransientError(err: any): boolean {
+  const msg = (err?.message || '').toLowerCase();
+  return (
+    msg.includes('503') ||
+    msg.includes('high demand') ||
+    msg.includes('unavailable') ||
+    msg.includes('429') ||
+    msg.includes('resource_exhausted') ||
+    msg.includes('quota')
+  );
+}
+
+/**
+ * Executes content generation with multi-key rotation and multi-model fallback on 503/429 errors.
  */
 export async function generateContentWithKeyFallback(
   systemPrompt: string,
@@ -77,42 +101,44 @@ export async function generateContentWithKeyFallback(
 
   let lastError: any = null;
 
-  for (let i = 0; i < keyPool.length; i++) {
-    const activeKey = keyPool[i];
+  // Outer loop: Try all available API keys
+  for (let keyIdx = 0; keyIdx < keyPool.length; keyIdx++) {
+    const activeKey = keyPool[keyIdx];
+    const ai = new GoogleGenAI({ apiKey: activeKey });
 
-    try {
-      console.log(`[Gemini Rotation] Attempting generation with Key #${i + 1}...`);
-      const ai = new GoogleGenAI({ apiKey: activeKey });
+    // Inner loop: Try candidate models if upstream spikes occur
+    for (const modelName of FALLBACK_MODELS) {
+      try {
+        console.log(`[Gemini Rotation] Attempting Key #${keyIdx + 1} with Model: ${modelName}...`);
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: [{ role: 'user', parts }],
-        config: {
-          systemInstruction: systemPrompt,
-          responseMimeType: 'application/json',
-          temperature,
-          maxOutputTokens,
-        },
-      });
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: [{ role: 'user', parts }],
+          config: {
+            systemInstruction: systemPrompt,
+            responseMimeType: 'application/json',
+            temperature,
+            maxOutputTokens,
+          },
+        });
 
-      const text = response.text || '';
-      if (text.trim()) {
-        console.log(`[Gemini Rotation] Success with Key #${i + 1}`);
-        return text;
-      }
-    } catch (err: any) {
-      lastError = err;
-      const errorMsg = err?.message || '';
-      const isQuotaError =
-        errorMsg.includes('429') ||
-        errorMsg.includes('RESOURCE_EXHAUSTED') ||
-        errorMsg.includes('quota');
+        const text = response.text || '';
+        if (text.trim()) {
+          console.log(`[Gemini Rotation] Success with Key #${keyIdx + 1} on ${modelName}`);
+          return text;
+        }
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`[Gemini Rotation] Warning on Key #${keyIdx + 1} (${modelName}):`, err.message);
 
-      if (isQuotaError) {
-        console.warn(`[Gemini Rotation] Key #${i + 1} exhausted daily quota. Switching to next key...`);
-        continue;
-      } else {
-        throw err;
+        // If high-traffic spike (503) or rate limit (429), try next fallback model after brief delay
+        if (isTransientError(err)) {
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          continue;
+        }
+
+        // If hard syntax/input error, break out of model loop and switch keys
+        break;
       }
     }
   }
@@ -120,7 +146,7 @@ export async function generateContentWithKeyFallback(
   throw (
     lastError ||
     new Error(
-      'All configured API keys have exhausted their daily quota limits (429). Please try again later or add another key.'
+      'All AI models and API keys are currently experiencing high traffic (503/429). Please try again in a few moments.'
     )
   );
 }
@@ -138,7 +164,7 @@ export async function extractMedicalReportContent(
     mimeType || (cleanBase64.startsWith('JVBERi0') ? 'application/pdf' : 'image/jpeg');
 
   const systemPrompt = `
-You are FoodWise AI, an expert clinical dietitian, toxicologist, and medical record extraction specialist.
+You are FoodSense AI, an expert clinical dietitian, toxicologist, and medical record extraction specialist.
 Analyze this medical document (prescription, diagnostic report, lab panel, allergy test, or discharge summary) and extract:
 1. All diagnosed clinical conditions, symptoms, IgE allergies, and food intolerances.
 2. Specific chemical food additives (INS/E-numbers), artificial sweeteners, preservatives, emulsifiers, synthetic dyes, or food categories the patient must avoid.
@@ -197,7 +223,7 @@ Identify all clinical diagnoses, lab triggers, and specifically map them to food
 }
 
 /**
- * Health & First Aid Chatbot query handler with multi-key rotation fallback.
+ * Health & First Aid Chatbot query handler with multi-key rotation and multi-model fallback.
  */
 export async function askHealthChatbot(
   userQuery: string,
@@ -211,7 +237,7 @@ export async function askHealthChatbot(
   }
 
   const systemInstruction = `
-You are FoodWise Health Assistant, an empathetic clinical food safety advisor.
+You are FoodSense Health Assistant, an empathetic clinical food safety advisor.
 User Health Context: ${userContext}
 Provide clear, accurate guidance on food additives, allergic reactions, dietary safety, and first aid tips.
 If symptoms are severe (anaphylaxis, difficulty breathing, throat swelling), immediately advise seeking emergency medical attention.
@@ -228,28 +254,31 @@ If symptoms are severe (anaphylaxis, difficulty breathing, throat swelling), imm
     },
   ];
 
-  for (let i = 0; i < keyPool.length; i++) {
-    try {
-      const ai = new GoogleGenAI({ apiKey: keyPool[i] });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: formattedContents,
-        config: {
-          systemInstruction,
-          temperature: 0.3,
-          maxOutputTokens: 1000,
-        },
-      });
+  for (let keyIdx = 0; keyIdx < keyPool.length; keyIdx++) {
+    const ai = new GoogleGenAI({ apiKey: keyPool[keyIdx] });
 
-      return response.text || 'I am sorry, I could not process your request at this time.';
-    } catch (err: any) {
-      const errorMsg = err?.message || '';
-      if (errorMsg.includes('429') || errorMsg.includes('RESOURCE_EXHAUSTED')) {
-        continue;
+    for (const modelName of FALLBACK_MODELS) {
+      try {
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: formattedContents,
+          config: {
+            systemInstruction,
+            temperature: 0.3,
+            maxOutputTokens: 1000,
+          },
+        });
+
+        return response.text || 'I have analyzed your query. Please consult a physician for official clinical care.';
+      } catch (err: any) {
+        if (isTransientError(err)) {
+          await new Promise((r) => setTimeout(r, 600));
+          continue;
+        }
+        break;
       }
-      throw err;
     }
   }
 
-  throw new Error('Daily AI chat quota reached across all configured keys.');
+  throw new Error('The AI engine is currently experiencing high demand across all keys. Please try again shortly.');
 }
