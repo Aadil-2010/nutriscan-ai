@@ -102,9 +102,9 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
 
   const SAMPLE_BARCODES = [
     { label: 'Coca-Cola', code: '5449000000996', name: 'Coca-Cola Original Taste' },
-    { label: 'Thai Rice Noodles', code: '0737628064502', name: 'Thai Kitchen Stir-Fry Rice Noodles' },
+    { label: 'Lays', code: '8901491101837', name: 'Lays Classic Salted Potato Chips' },
     { label: 'Nutella', code: '3017620422003', name: 'Nutella Hazelnut Spread' },
-    { label: 'Snickers', code: '5000159407236', name: 'Snickers Milk Chocolate Bar' },
+    { label: 'Mars', code: '5000159407236', name: 'Mars Chocolate Bar' },
   ];
 
   const handleSelectQuickBarcode = (item: { label: string; code: string; name: string }) => {
