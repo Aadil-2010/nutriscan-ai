@@ -6,18 +6,39 @@ export interface MedicalExtractionResult {
   additives_to_avoid: string[];
 }
 
-/**
- * Fallback models prioritized by speed, performance, and stability.
- */
+export interface BarcodeVerificationResult {
+  verifiedTitle: string;
+  verifiedBrand: string;
+  isCorrected: boolean;
+}
+
+export interface DetectedPackage {
+  package_index: number;
+  product_name: string;
+  brand_name: string;
+  variant_or_flavor: string;
+  confidence: 'High' | 'Medium' | 'Low';
+  detected_additives: {
+    ins_e_number: string;
+    name: string;
+    functional_class: string;
+    safety_rating: 'Safe' | 'Caution' | 'High Risk';
+  }[];
+  health_summary: string;
+  allergen_alerts: string[];
+}
+
+export interface MultiPackageScanResult {
+  total_packages_detected: number;
+  packages: DetectedPackage[];
+}
+
 const FALLBACK_MODELS = [
-  'gemini-3.8-flash',
-  'gemini-3.6-flash',
-  'gemini-3.0-flash'
+  'gemini-2.5-flash',
+  'gemini-3.1-flash-lite',
+  'gemini-3-flash-preview',
 ];
 
-/**
- * Returns all configured Gemini API keys found in the environment.
- */
 export function getApiKeyPool(): string[] {
   return [
     import.meta.env.VITE_GEMINI_API_KEY,
@@ -27,27 +48,18 @@ export function getApiKeyPool(): string[] {
   ].filter(Boolean) as string[];
 }
 
-/**
- * Robust JSON extractor that handles markdown blocks, trailing commas, 
- * control characters, and surrounding conversational text.
- */
 export function safeExtractJson(rawText: string): any {
   if (!rawText || typeof rawText !== 'string') {
-    throw new Error('Empty response received from AI.');
+    throw new Error('Empty response received from AI engine.');
   }
 
-  // 1. Strip Markdown code blocks
   let cleaned = rawText.replace(/```json\s*([\s\S]*?)\s*```/gi, '$1');
   cleaned = cleaned.replace(/```\s*([\s\S]*?)\s*```/gi, '$1').trim();
 
-  // 2. Direct Parse Attempt
   try {
     return JSON.parse(cleaned);
-  } catch (_) {
-    // Continue to outer brace extraction
-  }
+  } catch (_) {}
 
-  // 3. Locate the outermost JSON object
   const firstBrace = cleaned.indexOf('{');
   const lastBrace = cleaned.lastIndexOf('}');
 
@@ -56,7 +68,6 @@ export function safeExtractJson(rawText: string): any {
     try {
       return JSON.parse(extracted);
     } catch (_) {
-      // 4. Sanitize trailing commas and invalid ASCII control chars
       const sanitized = extracted
         .replace(/,\s*([}\]])/g, '$1')
         .replace(/[\u0000-\u001F]+/g, ' ');
@@ -67,94 +78,190 @@ export function safeExtractJson(rawText: string): any {
   throw new Error('AI output did not contain a readable JSON object structure.');
 }
 
-/**
- * Helper to determine if an error is due to overload (503) or rate-limiting (429).
- */
-function isTransientError(err: any): boolean {
+function isQuotaOrAuthError(err: any): boolean {
+  const msg = (err?.message || '').toLowerCase();
+  return (
+    msg.includes('429') ||
+    msg.includes('resource_exhausted') ||
+    msg.includes('quota') ||
+    msg.includes('403') ||
+    msg.includes('api_key_invalid') ||
+    msg.includes('permission_denied')
+  );
+}
+
+function isTransientServerError(err: any): boolean {
   const msg = (err?.message || '').toLowerCase();
   return (
     msg.includes('503') ||
     msg.includes('high demand') ||
     msg.includes('unavailable') ||
-    msg.includes('429') ||
-    msg.includes('resource_exhausted') ||
-    msg.includes('quota')
+    msg.includes('500')
   );
 }
 
-/**
- * Executes content generation with multi-key rotation and multi-model fallback on 503/429 errors.
- */
 export async function generateContentWithKeyFallback(
   systemPrompt: string,
   parts: any[],
   temperature: number = 0.1,
-  maxOutputTokens: number = 2500
+  maxOutputTokens: number = 2200,
+  enableSearch: boolean = false
 ): Promise<string> {
   const keyPool = getApiKeyPool();
 
   if (keyPool.length === 0) {
-    throw new Error(
-      'No Gemini API keys configured. Please add VITE_GEMINI_API_KEY to your .env file or Vercel settings.'
-    );
+    throw new Error('No Gemini API keys configured. Please add VITE_GEMINI_API_KEY in your .env file.');
   }
 
   let lastError: any = null;
 
-  // Outer loop: Try all available API keys
   for (let keyIdx = 0; keyIdx < keyPool.length; keyIdx++) {
     const activeKey = keyPool[keyIdx];
     const ai = new GoogleGenAI({ apiKey: activeKey });
 
-    // Inner loop: Try candidate models if upstream spikes occur
     for (const modelName of FALLBACK_MODELS) {
       try {
-        console.log(`[Gemini Rotation] Attempting Key #${keyIdx + 1} with Model: ${modelName}...`);
+        const config: any = {
+          systemInstruction: systemPrompt,
+          temperature,
+          maxOutputTokens,
+        };
+
+        if (enableSearch) {
+          config.tools = [{ googleSearch: {} }];
+        } else {
+          config.responseMimeType = 'application/json';
+        }
 
         const response = await ai.models.generateContent({
           model: modelName,
           contents: [{ role: 'user', parts }],
-          config: {
-            systemInstruction: systemPrompt,
-            responseMimeType: 'application/json',
-            temperature,
-            maxOutputTokens,
-          },
+          config,
         });
 
         const text = response.text || '';
         if (text.trim()) {
-          console.log(`[Gemini Rotation] Success with Key #${keyIdx + 1} on ${modelName}`);
           return text;
         }
       } catch (err: any) {
         lastError = err;
-        console.warn(`[Gemini Rotation] Warning on Key #${keyIdx + 1} (${modelName}):`, err.message);
+        console.warn(`Key #${keyIdx + 1} with ${modelName} encountered an error:`, err.message);
 
-        // If high-traffic spike (503) or rate limit (429), try next fallback model after brief delay
-        if (isTransientError(err)) {
-          await new Promise((resolve) => setTimeout(resolve, 800));
-          continue;
+        if (isQuotaOrAuthError(err)) {
+          break;
         }
 
-        // If hard syntax/input error, break out of model loop and switch keys
-        break;
+        if (isTransientServerError(err)) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+
+        continue;
       }
     }
   }
 
-  throw (
-    lastError ||
-    new Error(
-      'All AI models and API keys are currently experiencing high traffic (503/429). Please try again in a few moments.'
-    )
-  );
+  throw lastError || new Error('All AI models and API keys failed.');
 }
 
-/**
- * Extracts diagnosed conditions, dietary restrictions, and additives to avoid
- * from an uploaded lab report / prescription PDF or image.
- */
+export async function detectAllPackagesInFrame(
+  base64Image: string,
+  userAge: string = 'Adult',
+  userWeight: string = '65 kg',
+  sensitivities: string = 'None'
+): Promise<MultiPackageScanResult> {
+  const cleanBase64 = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
+  const mimeType = base64Image.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
+
+  const systemPrompt = `
+You are FoodWise AI, an expert computer vision food analyst and clinical toxicologist.
+
+Scan the ENTIRE provided image and detect ALL distinct food/beverage packages visible (e.g. snack wrappers, biscuit packets, cereal boxes, wafers, drinks).
+
+For EACH package detected:
+1. Identify the exact real brand and product title (e.g. "Parle Hide & Seek", "Nestlé Munch Crunchilicious", "Dukes Waffy Orange").
+2. Identify flavor and variant accurately from packaging text/graphics.
+3. Extract probable/stated INS additives and allergen alerts.
+4. Provide a clinical health summary tailored to user age (${userAge}) and weight (${userWeight}).
+
+Return STRICT JSON matching this schema:
+{
+  "total_packages_detected": 1,
+  "packages": [
+    {
+      "package_index": 1,
+      "product_name": "Full Product Name",
+      "brand_name": "Brand Name",
+      "variant_or_flavor": "Flavor / Variant",
+      "confidence": "High",
+      "detected_additives": [
+        {
+          "ins_e_number": "INS 110",
+          "name": "Sunset Yellow FCF",
+          "functional_class": "Synthetic Food Colour",
+          "safety_rating": "Caution"
+        }
+      ],
+      "health_summary": "2-sentence clinical intake evaluation.",
+      "allergen_alerts": ["Wheat (Gluten)", "Soy"]
+    }
+  ]
+}
+`;
+
+  const parts = [
+    {
+      inlineData: {
+        data: cleanBase64,
+        mimeType,
+      },
+    },
+    { text: 'Identify all food packages visible in this image.' },
+  ];
+
+  const rawText = await generateContentWithKeyFallback(systemPrompt, parts, 0.1, 2500);
+  return safeExtractJson(rawText);
+}
+
+export async function crossVerifyBarcodeWithWeb(
+  barcode: string,
+  rawTitle: string
+): Promise<BarcodeVerificationResult> {
+  const prompt = `
+A barcode lookup returned: "${rawTitle}" for barcode "${barcode}".
+Search Indian retail platforms (Blinkit, Zepto, BigBasket, Amazon India, GS1 India) for barcode "${barcode}".
+
+Verify:
+1. What exact commercial product and variant is registered to barcode "${barcode}"?
+2. What is the real brand name and exact product title with flavor?
+
+Return ONLY valid JSON:
+{
+  "verified_title": "Real Product Title and Flavor",
+  "verified_brand": "Real Brand Name",
+  "is_corrected": true
+}
+`;
+
+  try {
+    const rawText = await generateContentWithKeyFallback(
+      'You are a strict Indian FMCG retail identification specialist.',
+      [{ text: prompt }],
+      0.1,
+      600,
+      true
+    );
+    const parsed = safeExtractJson(rawText);
+    return {
+      verifiedTitle: parsed.verified_title || rawTitle,
+      verifiedBrand: parsed.verified_brand || '',
+      isCorrected: Boolean(parsed.is_corrected),
+    };
+  } catch (err) {
+    console.warn('Barcode web verification skipped:', err);
+    return { verifiedTitle: rawTitle, verifiedBrand: '', isCorrected: false };
+  }
+}
+
 export async function extractMedicalReportContent(
   base64Data: string,
   mimeType?: string
@@ -164,41 +271,25 @@ export async function extractMedicalReportContent(
     mimeType || (cleanBase64.startsWith('JVBERi0') ? 'application/pdf' : 'image/jpeg');
 
   const systemPrompt = `
-You are FoodSense AI, an expert clinical dietitian, toxicologist, and medical record extraction specialist.
-Analyze this medical document (prescription, diagnostic report, lab panel, allergy test, or discharge summary) and extract:
-1. All diagnosed clinical conditions, symptoms, IgE allergies, and food intolerances.
-2. Specific chemical food additives (INS/E-numbers), artificial sweeteners, preservatives, emulsifiers, synthetic dyes, or food categories the patient must avoid.
-3. A clear, empathetic 2-3 sentence clinical summary of the patient's health status and dietary implications.
+You are FoodSense AI, an expert clinical dietitian and toxicologist.
+Extract clinical diagnoses, allergies, food intolerances, and specific chemical food additives (INS/E-numbers) to avoid.
 
-Return ONLY valid JSON matching this schema:
+Return valid JSON:
 {
-  "summary": "Concise 2-3 sentence clinical summary of patient findings and dietary cautions.",
-  "diagnosed_sensitivities": [
-    "Asthma / Sulfite Sensitivity",
-    "Lactose Intolerance",
-    "Hypertension"
-  ],
-  "additives_to_avoid": [
-    "INS 220 (Sulfur Dioxide)",
-    "INS 621 (Monosodium Glutamate)",
-    "Artificial Sweeteners (INS 951/Aspartame)"
-  ]
+  "summary": "2-3 sentence clinical summary.",
+  "diagnosed_sensitivities": ["Condition 1"],
+  "additives_to_avoid": ["INS 220", "INS 621"]
 }
-`;
-
-  const promptText = `
-Please carefully review this patient medical document.
-Identify all clinical diagnoses, lab triggers, and specifically map them to food additive numbers (INS/E-codes) and allergens the patient must avoid in packaged foods.
 `;
 
   const parts = [
     {
       inlineData: {
         data: cleanBase64,
-        mimeType: validMimeType,
+        mimeType,
       },
     },
-    { text: promptText },
+    { text: 'Extract dietary sensitivities and food additive contraindications from this document.' },
   ];
 
   try {
@@ -206,25 +297,16 @@ Identify all clinical diagnoses, lab triggers, and specifically map them to food
     const parsed = safeExtractJson(rawText);
 
     return {
-      summary: parsed.summary || 'Medical document analyzed and clinical food triggers identified.',
-      diagnosed_sensitivities: Array.isArray(parsed.diagnosed_sensitivities)
-        ? parsed.diagnosed_sensitivities
-        : [],
-      additives_to_avoid: Array.isArray(parsed.additives_to_avoid)
-        ? parsed.additives_to_avoid
-        : [],
+      summary: parsed.summary || 'Medical document analyzed and food triggers identified.',
+      diagnosed_sensitivities: Array.isArray(parsed.diagnosed_sensitivities) ? parsed.diagnosed_sensitivities : [],
+      additives_to_avoid: Array.isArray(parsed.additives_to_avoid) ? parsed.additives_to_avoid : [],
     };
   } catch (error: any) {
     console.error('Failed to extract medical report content:', error);
-    throw new Error(
-      error.message || 'Unable to parse medical report. Please verify document clarity and try again.'
-    );
+    throw new Error(error.message || 'Unable to parse medical report.');
   }
 }
 
-/**
- * Health & First Aid Chatbot query handler with multi-key rotation and multi-model fallback.
- */
 export async function askHealthChatbot(
   userQuery: string,
   chatHistory: { role: string; content: string }[],
@@ -239,8 +321,8 @@ export async function askHealthChatbot(
   const systemInstruction = `
 You are FoodSense Health Assistant, an empathetic clinical food safety advisor.
 User Health Context: ${userContext}
-Provide clear, accurate guidance on food additives, allergic reactions, dietary safety, and first aid tips.
-If symptoms are severe (anaphylaxis, difficulty breathing, throat swelling), immediately advise seeking emergency medical attention.
+Provide direct guidance on food additives, allergens, and dietary safety.
+If symptoms suggest severe allergy or anaphylaxis, advise urgent emergency care immediately.
 `;
 
   const formattedContents = [
@@ -248,10 +330,7 @@ If symptoms are severe (anaphylaxis, difficulty breathing, throat swelling), imm
       role: m.role === 'user' ? 'user' : 'model',
       parts: [{ text: m.content }],
     })),
-    {
-      role: 'user',
-      parts: [{ text: userQuery }],
-    },
+    { role: 'user', parts: [{ text: userQuery }] },
   ];
 
   for (let keyIdx = 0; keyIdx < keyPool.length; keyIdx++) {
@@ -269,16 +348,13 @@ If symptoms are severe (anaphylaxis, difficulty breathing, throat swelling), imm
           },
         });
 
-        return response.text || 'I have analyzed your query. Please consult a physician for official clinical care.';
+        return response.text || 'Analysis complete. Please consult a doctor for official guidance.';
       } catch (err: any) {
-        if (isTransientError(err)) {
-          await new Promise((r) => setTimeout(r, 600));
-          continue;
-        }
-        break;
+        if (isQuotaOrAuthError(err)) break;
+        continue;
       }
     }
   }
 
-  throw new Error('The AI engine is currently experiencing high demand across all keys. Please try again shortly.');
+  throw new Error('AI engine busy. Please try again in a few moments.');
 }
