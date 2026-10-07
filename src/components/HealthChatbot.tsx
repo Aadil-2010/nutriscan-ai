@@ -26,13 +26,151 @@ interface Message {
 }
 
 const STORAGE_KEY_CHAT = 'foodsense_ai_chat_history_v11';
-
 const QUICK_CHIPS = [
   '🚨 Allergic Reaction / Hives',
   '🫁 Asthma / Sulfite Flare-up',
   '🧪 Accidental E-Number Ingestion',
   '👶 Child Ingested Food Additive',
 ];
+
+/**
+ * Strips JSON wrapping, removes markdown code fences,
+ * and fixes escaped newlines.
+ */
+function cleanAndUnwrapBotResponse(rawText: string): string {
+  if (!rawText) return '';
+  let cleaned = rawText.trim();
+
+  // Strip codeblock wrappers if any
+  cleaned = cleaned.replace(/```json\s*|```\s*/gi, '').trim();
+
+  if (cleaned.startsWith('{') && cleaned.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(cleaned);
+
+      if (typeof parsed.response === 'string') return parsed.response;
+      if (typeof parsed.message === 'string') return parsed.message;
+      if (typeof parsed.text === 'string') return parsed.text;
+
+      let combined = '';
+      if (parsed.clinical_impression) combined += `**Clinical Impression:**\n${parsed.clinical_impression}\n\n`;
+      if (Array.isArray(parsed.potential_factors_triggers)) {
+        combined += `**Potential Factors & Triggers:**\n` + parsed.potential_factors_triggers.map((t: string) => `• ${t}`).join('\n') + '\n\n';
+      }
+      if (Array.isArray(parsed.recommended_next_steps_first_aid)) {
+        combined += `**Practical First Aid & Immediate Steps:**\n` + parsed.recommended_next_steps_first_aid.map((s: string) => `• ${s}`).join('\n') + '\n\n';
+      }
+      if (Array.isArray(parsed.when_to_seek_immediate_care)) {
+        combined += `**When to Seek Emergency Care:**\n` + parsed.when_to_seek_immediate_care.map((c: string) => `• ${c}`).join('\n') + '\n\n';
+      }
+      if (parsed.emergency_instruction) {
+        combined += `🚨 **Emergency Notice:** ${parsed.emergency_instruction}`;
+      }
+
+      if (combined.trim()) return combined.trim();
+    } catch {
+      // Not JSON, continue below
+    }
+  }
+
+  // Replace literal string "\n" with real newlines
+  return cleaned.replace(/\\n/g, '\n');
+}
+
+/**
+ * Parses inline **bold text** into styled glowing pills
+ */
+function parseInlineStyles(text: string) {
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return (
+        <strong
+          key={index}
+          className="font-bold text-emerald-300 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/30 mx-0.5"
+        >
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return part;
+  });
+}
+
+/**
+ * Visual Markdown & Alert Renderer Component
+ */
+const FormattedMessageText: React.FC<{ content: string }> = ({ content }) => {
+  const cleanContent = cleanAndUnwrapBotResponse(content);
+  const lines = cleanContent.split('\n');
+
+  return (
+    <div className="space-y-2.5 text-xs leading-relaxed">
+      {lines.map((line, idx) => {
+        const trimmed = line.trim();
+        if (!trimmed) return <div key={idx} className="h-1" />;
+
+        // Emergency & Red-Flag Warnings
+        if (
+          trimmed.toLowerCase().includes('emergency care') ||
+          trimmed.toLowerCase().includes('emergency notice') ||
+          trimmed.startsWith('🚨')
+        ) {
+          return (
+            <div
+              key={idx}
+              className="p-3 my-2 rounded-xl bg-rose-950/50 border border-rose-500/50 text-rose-200 font-medium flex flex-col gap-1 shadow-sm"
+            >
+              <span className="text-[10px] font-black tracking-wider uppercase text-rose-400 flex items-center gap-1">
+                <AlertTriangle className="w-3.5 h-3.5 inline" /> Critical Emergency Notice
+              </span>
+              <span>{parseInlineStyles(trimmed.replace(/^#+\s*|\*+/g, ''))}</span>
+            </div>
+          );
+        }
+
+        // Section Badges (Clinical Impression, Triggers, Steps)
+        if (
+          trimmed.startsWith('Clinical Impression:') ||
+          trimmed.startsWith('Potential Triggers') ||
+          trimmed.startsWith('Potential Factors') ||
+          trimmed.startsWith('Practical First Aid') ||
+          trimmed.startsWith('**Clinical Impression') ||
+          trimmed.startsWith('**Potential Triggers') ||
+          trimmed.startsWith('**Potential Factors') ||
+          trimmed.startsWith('**Practical First Aid')
+        ) {
+          return (
+            <div key={idx} className="pt-2">
+              <span className="inline-block px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-300 font-extrabold text-[11px] uppercase tracking-wide border border-emerald-500/30 shadow-sm">
+                {trimmed.replace(/\*\*/g, '').replace(':', '')}
+              </span>
+            </div>
+          );
+        }
+
+        // Bullet Point Formatting
+        if (trimmed.startsWith('- ') || trimmed.startsWith('• ')) {
+          return (
+            <div key={idx} className="flex items-start gap-2 pl-2">
+              <span className="text-emerald-400 font-bold text-sm leading-none mt-0.5">•</span>
+              <span className="text-slate-200 leading-normal">
+                {parseInlineStyles(trimmed.slice(2))}
+              </span>
+            </div>
+          );
+        }
+
+        // Normal Body Paragraphs
+        return (
+          <p key={idx} className="text-slate-200 leading-relaxed">
+            {parseInlineStyles(trimmed)}
+          </p>
+        );
+      })}
+    </div>
+  );
+};
 
 export const HealthChatbot: React.FC = () => {
   const [isOpen, setIsOpen] = useState<boolean>(false);
@@ -76,7 +214,6 @@ export const HealthChatbot: React.FC = () => {
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = (event) => {
       setSelectedImage(event.target?.result as string);
@@ -85,7 +222,6 @@ export const HealthChatbot: React.FC = () => {
   };
 
   const generateSmartResponse = async (history: Message[]): Promise<string> => {
-    // 1. Retrieve Active Patient Context
     let profileContext = 'None recorded';
     try {
       const savedProfile = localStorage.getItem('nutriscan_ai_user_profile_v1');
@@ -105,30 +241,26 @@ Patient Health Profile Context:
     const systemInstruction = `
 You are FoodSense Clinical AI, an expert medical triage assistant, clinical nutritionist, toxicologist, and first-aid guide.
 
-Core Guidelines:
-1. **Medical & Nutrition Expertise**: Provide clear, accurate clinical insights for food additive reactions, dietary restrictions, allergic manifestations (urticaria, contact dermatitis, erythema), and toxicological ADI benchmarks.
-2. **Visual Triage**: When a symptom photo is provided, evaluate visible clinical markers (swelling, rash distribution, borders, inflammation) and describe your observations clearly.
-3. **Structured Response Style**:
-   - **Clinical Impression**: Concise summary of what the symptoms suggest.
-   - **Potential Factors / Triggers**: Chemical additive, allergen, or nutritional possibilities.
-   - **Recommended Next Steps / First Aid**: Practical, safe actions the patient can take now.
-   - **When to Seek Immediate Care**: Specific red flags requiring emergency medical evaluation.
-4. **Emergency Red Flags**: If the user reports throat tightness, breathing difficulty, tongue swelling, anaphylaxis signs, or chest pain, immediately instruct them to contact emergency services (112 / 911) right away.
+CRITICAL FORMATTING INSTRUCTIONS:
+- You are speaking directly to a patient. NEVER return raw JSON code blocks or curly braces {}.
+- Structure your response using these exact plain text headings:
+  Clinical Impression:
+  Potential Triggers & Additives:
+  Practical First Aid & Immediate Steps:
+  When to Seek Emergency Care:
+- Use bullet points (- ) for actionable advice.
+- Use bolding (**term**) for important terms and warnings.
+- If symptoms indicate anaphylaxis, airway closure, or severe respiratory distress, immediately instruct emergency care (112 / 911).
 
 ${profileContext}
 `;
 
-    // 2. Build multi-modal parts from message history
     const parts: any[] = [];
-    
-    // Include conversation history
     const conversationHistoryText = history
       .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
       .join('\n\n');
-
     parts.push({ text: `Conversation History:\n${conversationHistoryText}` });
 
-    // Attach latest image if present
     const latestMsg = history[history.length - 1];
     if (latestMsg?.image && latestMsg.image.includes(',')) {
       const mimeType = latestMsg.image.split(';')[0].replace('data:', '') || 'image/jpeg';
@@ -141,7 +273,6 @@ ${profileContext}
       });
     }
 
-    // 3. Dispatch through Multi-Key / Multi-Model Fallback Engine
     const responseText = await generateContentWithKeyFallback(
       systemInstruction,
       parts,
@@ -149,10 +280,7 @@ ${profileContext}
       1500
     );
 
-    return (
-      responseText ||
-      'I have reviewed your inquiry. Please consult a qualified medical professional for definitive diagnosis.'
-    );
+    return cleanAndUnwrapBotResponse(responseText);
   };
 
   const handleSend = async (overrideText?: string) => {
@@ -171,7 +299,6 @@ ${profileContext}
     };
 
     const updatedHistory: Message[] = [...messages, newMsg];
-
     setMessages(updatedHistory);
     setInput('');
     setSelectedImage(null);
@@ -197,7 +324,6 @@ ${profileContext}
       } else if (errorMsg.includes('429') || errorMsg.includes('quota')) {
         displayError = 'Daily AI safety quota exceeded. Switching to backup server pool...';
       }
-
       setApiError(displayError);
       setMessages([
         ...updatedHistory,
@@ -215,7 +341,7 @@ ${profileContext}
 
   return (
     <>
-      {/* Floating Activation Button */}
+      {/* Floating Activator */}
       <button
         onClick={() => setIsOpen(true)}
         className="fixed bottom-20 md:bottom-6 right-4 z-40 w-12 h-12 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 rounded-full shadow-xl shadow-emerald-500/25 flex items-center justify-center active:scale-90 transition-all cursor-pointer group"
@@ -225,7 +351,7 @@ ${profileContext}
         <Bot className="w-6 h-6 transition-transform group-hover:scale-110" />
       </button>
 
-      {/* Modal Dialog */}
+      {/* Main Drawer Modal */}
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
           <div className="w-full max-w-lg h-[92vh] sm:h-[640px] bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl flex flex-col shadow-2xl overflow-hidden">
@@ -247,7 +373,6 @@ ${profileContext}
                   <p className="text-[11px] text-slate-400">Symptom evaluation, photo triage & first aid</p>
                 </div>
               </div>
-
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
@@ -267,7 +392,7 @@ ${profileContext}
               </div>
             </div>
 
-            {/* Chat Messages Workspace */}
+            {/* Chat Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.length === 0 && (
                 <div className="text-center py-8 px-4 space-y-4 text-slate-500">
@@ -279,7 +404,6 @@ ${profileContext}
                     </p>
                   </div>
 
-                  {/* Preset Quick Actions */}
                   <div className="pt-2 space-y-1.5 text-left">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">Common Inquiries</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
@@ -315,10 +439,16 @@ ${profileContext}
                       <img 
                         src={msg.image} 
                         alt="Uploaded symptom" 
-                        className="rounded-xl max-h-48 w-auto object-cover border border-slate-700/50 mb-1"
+                        className="rounded-xl max-h-48 w-auto object-cover border border-slate-700/50 mb-2"
                       />
                     )}
-                    <div className="whitespace-pre-wrap">{msg.content}</div>
+
+                    {msg.role === 'assistant' ? (
+                      <FormattedMessageText content={msg.content} />
+                    ) : (
+                      <div className="whitespace-pre-wrap font-medium">{msg.content}</div>
+                    )}
+
                     <div className={`text-[9px] mt-1 text-right ${msg.role === 'user' ? 'text-slate-800' : 'text-slate-400'}`}>
                       {msg.timestamp}
                     </div>
@@ -345,7 +475,7 @@ ${profileContext}
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input & Photo Attachment Controls */}
+            {/* Input Controls */}
             <div className="p-3 bg-slate-950 border-t border-slate-800 space-y-2">
               {selectedImage && (
                 <div className="relative inline-block">
@@ -378,7 +508,6 @@ ${profileContext}
                   onChange={handleImageSelect}
                   className="hidden"
                 />
-
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
@@ -407,7 +536,7 @@ ${profileContext}
 
               <div className="flex items-center justify-center gap-1.5 text-[10px] text-slate-500">
                 <PhoneCall className="w-3 h-3 text-amber-500 flex-shrink-0" />
-                <span>Emergency: For throat swelling, stroke signs, or severe trauma, call 112 / 911 immediately.</span>
+                <span>Emergency: For throat swelling or severe breathing difficulty, call 112 / 911 immediately.</span>
               </div>
             </div>
 
