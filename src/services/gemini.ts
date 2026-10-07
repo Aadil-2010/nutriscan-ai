@@ -12,20 +12,54 @@ export interface BarcodeVerificationResult {
   isCorrected: boolean;
 }
 
+export interface AdditiveDetail {
+  ins_e_number: string;
+  name: string;
+  functional_class: string;
+  safety_rating: 'Safe' | 'Caution' | 'High Risk';
+  biological_mechanism?: string;
+  description?: string;
+  regulatory_status?: string;
+}
+
+export interface AllergenAlert {
+  detected: boolean;
+  allergen_name: string;
+  warning_type: 'Safe' | 'Watch' | 'Danger';
+  message: string;
+}
+
+export interface ProductAnalysisResult {
+  scan_data: {
+    detected_product_name: string;
+    brand_name: string;
+    barcode_detected: boolean;
+    barcode_number: string;
+    openfoodfacts_matched: boolean;
+  };
+  product_info: {
+    total_additives_found: number;
+    target_serving_size: string;
+    age_group_evaluated: string;
+  };
+  overall_analysis: {
+    health_summary: string;
+    key_warnings: string[];
+    toxicological_note: string;
+  };
+  additives_detected: AdditiveDetail[];
+  allergen_alert: AllergenAlert;
+}
+
 export interface DetectedPackage {
   package_index: number;
   product_name: string;
   brand_name: string;
   variant_or_flavor: string;
   confidence: 'High' | 'Medium' | 'Low';
-  detected_additives: {
-    ins_e_number: string;
-    name: string;
-    functional_class: string;
-    safety_rating: 'Safe' | 'Caution' | 'High Risk';
-  }[];
+  detected_additives: AdditiveDetail[];
   health_summary: string;
-  allergen_alerts: string[];
+  allergen_alerts: AllergenAlert[];
 }
 
 export interface MultiPackageScanResult {
@@ -33,14 +67,15 @@ export interface MultiPackageScanResult {
   packages: DetectedPackage[];
 }
 
+// Production-ready Flash models for fast, low-latency evaluation
 const FALLBACK_MODELS = [
-  'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
-  'gemini-3.8-flash',
-  'gemini-3.7-flash',
-  'gemini-3.5-flash',
-  'gemini-3.5-flash-lite'
+  'gemini-2.5-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-3.5-flash'
 ];
+
+let cachedWorkingKeyIndex = 0;
 
 export function getApiKeyPool(): string[] {
   return [
@@ -82,23 +117,37 @@ export function safeExtractJson(rawText: string): any {
 }
 
 function isQuotaOrAuthError(err: any): boolean {
-  const msg = (err?.message || '').toLowerCase();
+  const msg = String(err?.message || '').toLowerCase();
+  const status = String(err?.status || '').toLowerCase();
+  const code = Number(err?.code) || Number(err?.status) || 0;
+
   return (
+    code === 429 ||
+    code === 403 ||
+    status === 'resource_exhausted' ||
+    status === 'permission_denied' ||
     msg.includes('429') ||
+    msg.includes('403') ||
     msg.includes('resource_exhausted') ||
     msg.includes('quota') ||
-    msg.includes('403') ||
     msg.includes('api_key_invalid') ||
     msg.includes('permission_denied')
   );
 }
 
 function isTransientServerError(err: any): boolean {
-  const msg = (err?.message || '').toLowerCase();
+  const msg = String(err?.message || '').toLowerCase();
+  const status = String(err?.status || '').toLowerCase();
+  const code = Number(err?.code) || Number(err?.status) || 0;
+
   return (
+    code === 503 ||
+    code === 500 ||
+    status === 'unavailable' ||
     msg.includes('503') ||
     msg.includes('high demand') ||
     msg.includes('unavailable') ||
+    msg.includes('overloaded') ||
     msg.includes('500')
   );
 }
@@ -107,7 +156,7 @@ export async function generateContentWithKeyFallback(
   systemPrompt: string,
   parts: any[],
   temperature: number = 0.1,
-  maxOutputTokens: number = 2200,
+  maxOutputTokens: number = 1800,
   enableSearch: boolean = false
 ): Promise<string> {
   const keyPool = getApiKeyPool();
@@ -117,9 +166,11 @@ export async function generateContentWithKeyFallback(
   }
 
   let lastError: any = null;
+  const poolLen = keyPool.length;
 
-  for (let keyIdx = 0; keyIdx < keyPool.length; keyIdx++) {
-    const activeKey = keyPool[keyIdx];
+  for (let offset = 0; offset < poolLen; offset++) {
+    const currentKeyIdx = (cachedWorkingKeyIndex + offset) % poolLen;
+    const activeKey = keyPool[currentKeyIdx];
     const ai = new GoogleGenAI({ apiKey: activeKey });
 
     for (const modelName of FALLBACK_MODELS) {
@@ -144,26 +195,114 @@ export async function generateContentWithKeyFallback(
 
         const text = response.text || '';
         if (text.trim()) {
+          cachedWorkingKeyIndex = currentKeyIdx;
           return text;
         }
       } catch (err: any) {
         lastError = err;
-        console.warn(`Key #${keyIdx + 1} with ${modelName} encountered an error:`, err.message);
 
         if (isQuotaOrAuthError(err)) {
-          break;
+          break; // Key depleted or unauthorized -> hop to next key
         }
 
         if (isTransientServerError(err)) {
-          await new Promise((resolve) => setTimeout(resolve, 500));
+          continue; // Model busy -> fall back to next model
         }
-
-        continue;
       }
     }
   }
 
-  throw lastError || new Error('All AI models and API keys failed.');
+  throw lastError || new Error('All configured AI models and keys are currently busy. Please retry.');
+}
+
+/**
+ * Evaluates food ingredients against allergies, sensitivities, and toxicological safety.
+ * Includes strict anti-hallucination constraints to prevent false allergen flags.
+ */
+export async function analyzeIngredientsAndSafety(
+  productName: string,
+  ingredientsText: string,
+  barcode: string = '',
+  offMatched: boolean = false,
+  userAge: string = 'Adult',
+  userWeight: string = '65 kg',
+  activeSensitivities: string[] = []
+): Promise<ProductAnalysisResult> {
+  const trimmedBarcode = barcode.trim();
+  const sensitivitiesList = activeSensitivities.length > 0 ? activeSensitivities.join(', ') : 'None';
+
+  const systemPrompt = `
+You are FoodWise AI, an expert food toxicologist and clinical nutritionist.
+
+CRITICAL INSTRUCTIONS & ANTI-HALLUCINATION RULES:
+1. Base your evaluation EXCLUSIVELY on the provided ingredients text.
+2. Do NOT guess, assume, or hallucinate ingredients from other product flavors (e.g. Lay's Classic Salted contains only potatoes, oil, and salt—do NOT hallucinate onion, garlic, flavor enhancers, or dairy unless they appear explicitly in the ingredients list).
+3. If an ingredient is not explicitly listed, it DOES NOT exist in the product.
+4. If no allergens or active user sensitivities match the explicit ingredients, you MUST set:
+   "allergen_alert": {
+     "detected": false,
+     "allergen_name": "None",
+     "warning_type": "Safe",
+     "message": "No allergen triggers or sensitive ingredients detected in this product."
+   }
+5. If an allergen or sensitivity is present:
+   - For mild intolerances or advisories, set "warning_type": "Watch".
+   - For severe/anaphylactic triggers, set "warning_type": "Danger".
+
+Return STRICT valid JSON matching this schema:
+{
+  "scan_data": {
+    "detected_product_name": "${productName}",
+    "brand_name": "Accurate Brand Name",
+    "barcode_detected": ${Boolean(trimmedBarcode)},
+    "barcode_number": "${trimmedBarcode}",
+    "openfoodfacts_matched": ${offMatched}
+  },
+  "product_info": {
+    "total_additives_found": 0,
+    "target_serving_size": "Standard single serve (e.g. 40g)",
+    "age_group_evaluated": "${userAge}"
+  },
+  "overall_analysis": {
+    "health_summary": "2 to 3 sentence clinical and toxicological evaluation tailored to the user's age and weight.",
+    "key_warnings": [],
+    "toxicological_note": "Detailed ADI calculation relative to user weight."
+  },
+  "additives_detected": [
+    {
+      "ins_e_number": "INS Number",
+      "name": "Additive Name",
+      "functional_class": "Functional Class",
+      "safety_rating": "Safe",
+      "biological_mechanism": "Action mechanism",
+      "description": "Functional description and intake guidance",
+      "regulatory_status": "Status across FSSAI, FDA, EFSA"
+    }
+  ],
+  "allergen_alert": {
+    "detected": false,
+    "allergen_name": "Identified Allergen or Sensitivity",
+    "warning_type": "Safe",
+    "message": "Specific clinical notice."
+  }
+}
+`;
+
+  const userQuery = `
+Product: ${productName}
+Ingredients List: ${ingredientsText || 'No ingredients text supplied. Evaluate product variant name only.'}
+User Profile: Age: ${userAge}, Weight: ${userWeight}
+Active Sensitivity Flags: ${sensitivitiesList}
+`;
+
+  const rawText = await generateContentWithKeyFallback(
+    systemPrompt,
+    [{ text: userQuery }],
+    0.1,
+    1800
+  );
+
+  return safeExtractJson(rawText);
 }
 
 export async function detectAllPackagesInFrame(
@@ -178,13 +317,11 @@ export async function detectAllPackagesInFrame(
   const systemPrompt = `
 You are FoodWise AI, an expert computer vision food analyst and clinical toxicologist.
 
-Scan the ENTIRE provided image and detect ALL distinct food/beverage packages visible (e.g. snack wrappers, biscuit packets, cereal boxes, wafers, drinks).
-
-For EACH package detected:
-1. Identify the exact real brand and product title (e.g. "Parle Hide & Seek", "Nestlé Munch Crunchilicious", "Dukes Waffy Orange").
-2. Identify flavor and variant accurately from packaging text/graphics.
-3. Extract probable/stated INS additives and allergen alerts.
-4. Provide a clinical health summary tailored to user age (${userAge}) and weight (${userWeight}).
+SCAN THE IMAGE AND IDENTIFY VISIBLE FOOD PACKAGES:
+1. Identify the exact real brand and product title.
+2. Discern specific variant/flavor strictly from visible package text. Do NOT invent ingredients or confuse flavors.
+3. Extract additives with their INS/E-numbers and assign a safety rating.
+4. Base allergen alerts ONLY on what the packaging indicates. If clean, warning_type is "Safe". If mild/intolerance, "Watch". If severe, "Danger".
 
 Return STRICT JSON matching this schema:
 {
@@ -192,20 +329,26 @@ Return STRICT JSON matching this schema:
   "packages": [
     {
       "package_index": 1,
-      "product_name": "Full Product Name",
+      "product_name": "Product Name",
       "brand_name": "Brand Name",
-      "variant_or_flavor": "Flavor / Variant",
+      "variant_or_flavor": "Variant / Flavor",
       "confidence": "High",
       "detected_additives": [
         {
-          "ins_e_number": "INS 110",
-          "name": "Sunset Yellow FCF",
-          "functional_class": "Synthetic Food Colour",
-          "safety_rating": "Caution"
+          "ins_e_number": "INS Number",
+          "name": "Additive Name",
+          "functional_class": "Functional Class",
+          "safety_rating": "Safe"
         }
       ],
-      "health_summary": "2-sentence clinical intake evaluation.",
-      "allergen_alerts": ["Wheat (Gluten)", "Soy"]
+      "health_summary": "Concise 2-sentence clinical intake evaluation.",
+      "allergen_alerts": [
+        {
+          "allergen_name": "Trigger Name",
+          "warning_type": "Safe",
+          "message": "Specific clinical note."
+        }
+      ]
     }
   ]
 }
@@ -218,10 +361,10 @@ Return STRICT JSON matching this schema:
         mimeType,
       },
     },
-    { text: 'Identify all food packages visible in this image.' },
+    { text: `Detect packages for user (${userAge}, ${userWeight}). Active sensitivities: ${sensitivities}` },
   ];
 
-  const rawText = await generateContentWithKeyFallback(systemPrompt, parts, 0.1, 2500);
+  const rawText = await generateContentWithKeyFallback(systemPrompt, parts, 0.1, 1600);
   return safeExtractJson(rawText);
 }
 
@@ -234,8 +377,8 @@ A barcode lookup returned: "${rawTitle}" for barcode "${barcode}".
 Search Indian retail platforms (Blinkit, Zepto, BigBasket, Amazon India, GS1 India) for barcode "${barcode}".
 
 Verify:
-1. What exact commercial product and variant is registered to barcode "${barcode}"?
-2. What is the real brand name and exact product title with flavor?
+1. Exact commercial product and variant registered to barcode "${barcode}".
+2. Real brand name and exact product title with flavor.
 
 Return ONLY valid JSON:
 {
@@ -250,7 +393,7 @@ Return ONLY valid JSON:
       'You are a strict Indian FMCG retail identification specialist.',
       [{ text: prompt }],
       0.1,
-      600,
+      500,
       true
     );
     const parsed = safeExtractJson(rawText);
@@ -276,6 +419,7 @@ export async function extractMedicalReportContent(
   const systemPrompt = `
 You are FoodSense AI, an expert clinical dietitian and toxicologist.
 Extract clinical diagnoses, allergies, food intolerances, and specific chemical food additives (INS/E-numbers) to avoid.
+Only include findings explicitly confirmed in the document.
 
 Return valid JSON:
 {
@@ -289,14 +433,14 @@ Return valid JSON:
     {
       inlineData: {
         data: cleanBase64,
-        mimeType,
+        mimeType: validMimeType,
       },
     },
     { text: 'Extract dietary sensitivities and food additive contraindications from this document.' },
   ];
 
   try {
-    const rawText = await generateContentWithKeyFallback(systemPrompt, parts);
+    const rawText = await generateContentWithKeyFallback(systemPrompt, parts, 0.1, 1000);
     const parsed = safeExtractJson(rawText);
 
     return {
@@ -324,8 +468,11 @@ export async function askHealthChatbot(
   const systemInstruction = `
 You are FoodSense Health Assistant, an empathetic clinical food safety advisor.
 User Health Context: ${userContext}
-Provide direct guidance on food additives, allergens, and dietary safety.
-If symptoms suggest severe allergy or anaphylaxis, advise urgent emergency care immediately.
+
+Respond in concise, readable paragraphs and bullet points. 
+Do NOT output JSON or code blocks.
+Evaluate questions accurately based strictly on stated ingredients.
+If symptoms suggest severe allergy or anaphylaxis, advise urgent emergency care immediately (112 / local emergency).
 `;
 
   const formattedContents = [
@@ -336,8 +483,10 @@ If symptoms suggest severe allergy or anaphylaxis, advise urgent emergency care 
     { role: 'user', parts: [{ text: userQuery }] },
   ];
 
-  for (let keyIdx = 0; keyIdx < keyPool.length; keyIdx++) {
-    const ai = new GoogleGenAI({ apiKey: keyPool[keyIdx] });
+  const poolLen = keyPool.length;
+  for (let offset = 0; offset < poolLen; offset++) {
+    const currentKeyIdx = (cachedWorkingKeyIndex + offset) % poolLen;
+    const ai = new GoogleGenAI({ apiKey: keyPool[currentKeyIdx] });
 
     for (const modelName of FALLBACK_MODELS) {
       try {
@@ -346,12 +495,13 @@ If symptoms suggest severe allergy or anaphylaxis, advise urgent emergency care 
           contents: formattedContents,
           config: {
             systemInstruction,
-            temperature: 0.3,
-            maxOutputTokens: 1000,
+            temperature: 0.2,
+            maxOutputTokens: 800,
           },
         });
 
-        return response.text || 'Analysis complete. Please consult a doctor for official guidance.';
+        cachedWorkingKeyIndex = currentKeyIdx;
+        return response.text || 'Analysis complete. Please consult a qualified medical professional.';
       } catch (err: any) {
         if (isQuotaOrAuthError(err)) break;
         continue;
@@ -359,5 +509,5 @@ If symptoms suggest severe allergy or anaphylaxis, advise urgent emergency care 
     }
   }
 
-  throw new Error('AI engine busy. Please try again in a few moments.');
+  throw new Error('AI assistant is busy. Please try again shortly.');
 }
