@@ -63,9 +63,7 @@ export default function App() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
   const [analysisResult, setAnalysisResult] = useState<NutriScanResult | null>(null);
-
   const [isCameraOpen, setIsCameraOpen] = useState<boolean>(false);
   const [cameraMode, setCameraMode] = useState<'label' | 'barcode'>('barcode');
   const [selectedAdditiveModal, setSelectedAdditiveModal] = useState<AdditiveItem | null>(null);
@@ -184,12 +182,11 @@ export default function App() {
 
     try {
       const trimmedBarcode = barcodeInput.trim();
-      const userEnteredName = trimmedBarcode ? '' : productNameInput.trim();
-      const userEnteredIngredients = ingredientInput.trim();
-
+      let userEnteredName = trimmedBarcode ? '' : productNameInput.trim();
+      let userEnteredIngredients = ingredientInput.trim();
       const userAge = userProfile?.age ? `${userProfile.age} years old` : (userPreferences.kidsSafetyFocus ? 'Child (<12 years)' : 'Adult');
       const userWeight = userProfile?.weightKg ? `${userProfile.weightKg} kg` : (userPreferences.kidsSafetyFocus ? '25 kg (Child)' : '65 kg (Adult)');
-
+      
       const activeReportsContext = userProfile?.medicalReports
         ? userProfile.medicalReports.map((r, i) => `Report ${i + 1} (${r.title}): ${r.reportText}`).join('; ')
         : 'None recorded';
@@ -248,14 +245,13 @@ export default function App() {
               image_preview: selectedImage,
               allergen_alert: {
                 detected: primary.allergen_alerts.length > 0,
-                allergen_name: primary.allergen_alerts.join(', '),
+                allergen_name: primary.allergen_alerts.map((a: any) => typeof a === 'object' ? a.allergen_name : a).join(', '),
                 warning_type: 'Allergen Alert',
                 message: primary.allergen_alerts.length > 0 
-                  ? `Contains: ${primary.allergen_alerts.join(', ')}` 
+                  ? `Contains: ${primary.allergen_alerts.map((a: any) => typeof a === 'object' ? a.allergen_name : a).join(', ')}` 
                   : 'No critical allergen conflicts identified.',
               },
             };
-
             setAnalysisResult(completeMultiResult);
             return;
           }
@@ -264,16 +260,15 @@ export default function App() {
         }
       }
 
-      // MODE 2: BARCODE RESOLUTION (Web Search First, OpenFoodFacts as Fallback)
+      // MODE 2: BARCODE RESOLUTION (Live Grounding + Database Fallback)
       let fetchedIngredients = userEnteredIngredients;
       let fetchedProductName = userEnteredName;
       let fetchedBrand = '';
       let offImageUrl = '';
       let offMatched = false;
-      let offBase64Image: string | null = null;
 
       if (trimmedBarcode) {
-        // Step A: Search retail databases via Google Search Grounding
+        // Step A: Live verification to fix database typos ("Cjeese Popcorn" -> "Cheese Popcorn")
         try {
           const verified = await crossVerifyBarcodeWithWeb(trimmedBarcode, '');
           if (verified?.verifiedTitle) {
@@ -284,31 +279,56 @@ export default function App() {
           console.warn('Live retail verification skipped:', webErr);
         }
 
-        // Step B: If web search did not identify the product, query OpenFoodFacts
-        if (!fetchedProductName) {
-          try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3500);
-
-            const offRes = await fetch(
-              `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(trimmedBarcode)}.json`,
-              { signal: controller.signal }
-            );
-            clearTimeout(timeoutId);
-
-            if (offRes.ok) {
-              const offData = await offRes.json();
-              if (offData.status === 1 && offData.product) {
-                const p = offData.product;
-                fetchedProductName = p.product_name || p.product_name_en || '';
-                fetchedBrand = p.brands || '';
-                fetchedIngredients = p.ingredients_text || p.ingredients_text_en || fetchedIngredients;
-                offImageUrl = p.image_url || p.image_front_url || '';
-                offMatched = Boolean(fetchedProductName);
-              }
+        // Step B: Query OpenFoodFacts for extra packaging metadata
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 3500);
+          const offRes = await fetch(
+            `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(trimmedBarcode)}.json`,
+            { signal: controller.signal }
+          );
+          clearTimeout(timeoutId);
+          if (offRes.ok) {
+            const offData = await offRes.json();
+            if (offData.status === 1 && offData.product) {
+              const p = offData.product;
+              if (!fetchedProductName) fetchedProductName = p.product_name || p.product_name_en || '';
+              if (!fetchedBrand) fetchedBrand = p.brands || '';
+              if (!fetchedIngredients) fetchedIngredients = p.ingredients_text || p.ingredients_text_en || '';
+              offImageUrl = p.image_url || p.image_front_url || '';
+              offMatched = Boolean(fetchedProductName);
             }
-          } catch (offErr) {
-            console.warn('OpenFoodFacts fallback bypassed:', offErr);
+          }
+        } catch (offErr) {
+          console.warn('OpenFoodFacts fallback bypassed:', offErr);
+        }
+
+        // Step C: Web Search grounding if ingredients are missing
+        if (!fetchedIngredients || fetchedIngredients.trim().length < 15) {
+          try {
+            const searchPrompt = `
+Search Indian grocery platforms (Blinkit, Zepto, BigBasket, Amazon India) for:
+Barcode: "${trimmedBarcode}"
+Product: "${fetchedProductName}"
+Brand: "${fetchedBrand}"
+
+Extract and return:
+1. The exact full ingredients list printed on the packaging.
+2. All declared allergens.
+`;
+            const searchResultText = await generateContentWithKeyFallback(
+              'You are an Indian FMCG grocery database search assistant.',
+              [{ text: searchPrompt }],
+              0.1,
+              1000,
+              true
+            );
+
+            if (searchResultText && searchResultText.length > 20 && !searchResultText.toLowerCase().includes('no ingredients available')) {
+              fetchedIngredients = searchResultText;
+            }
+          } catch (searchErr) {
+            console.warn('Ingredients web search fallback error:', searchErr);
           }
         }
       }
@@ -316,28 +336,19 @@ export default function App() {
       const systemPrompt = `
 You are FoodWise AI, an expert food safety toxicologist, clinical dietitian, and regulatory specialist (FSSAI, US FDA, EFSA, JECFA).
 
-PATIENT CLINICAL & DEMOGRAPHIC PROFILE:
+PATIENT PROFILE:
 - User Age: ${userAge}
 - Estimated Weight: ${userWeight}
 - Health Conditions & Allergies: ${userSensitivitiesContext}
-- Medical Records Context: ${activeReportsContext}
-- Health Focus Flags: ${JSON.stringify(userPreferences)}
+- Medical Records: ${activeReportsContext}
+- Focus Flags: ${JSON.stringify(userPreferences)}
 
-INPUT DATA:
-- Barcode Number: ${trimmedBarcode || 'N/A'}
-- Product Title: "${fetchedProductName || 'N/A'}"
-- Brand: "${fetchedBrand || 'N/A'}"
-- Ingredients: "${fetchedIngredients || 'N/A'}"
-
-CRITICAL RULES:
-1. STRICT PRODUCT IDENTITY:
-   - Identify the exact product and variant.
-   - Anchor your analysis strictly to the resolved product title: "${fetchedProductName}".
-2. QUANTITATIVE ADI & AGE-BASED ASSESSMENT:
-   - Factor in user age (${userAge}) and weight (${userWeight}).
-   - Evaluate chemical additives against established Acceptable Daily Intake (ADI in mg/kg bw/day) thresholds (EFSA, JECFA, FSSAI).
-3. ACCURATE ADDITIVE PARSING:
-   - Extract ALL relevant chemical food additives with their specific INS / E-numbers.
+CRITICAL EVALUATION RULES:
+1. Always resolve to the authentic product identity and brand.
+2. Extract ALL chemical food additives, artificial preservatives, synthetic colors, emulsifiers, antioxidants, and acidity regulators with their specific INS / E-numbers (e.g. INS 319 / TBHQ, INS 330, INS 900a, INS 471, INS 322, INS 150d).
+3. Do not hallucinate synthetic additives if only whole food ingredients exist.
+4. Ensure "allergen_name" is strictly a plain text string (e.g. "Dairy / Cheese Solids", "Soy", "Gluten"). Never return an object.
+5. If allergens or active sensitivities are present, set "detected": true. If clean, set "detected": false.
 
 Return strictly valid JSON:
 {
@@ -363,7 +374,7 @@ Return strictly valid JSON:
       "ins_e_number": "INS Number",
       "name": "Additive Name",
       "functional_class": "Functional Class",
-      "safety_rating": "Safe / Caution / High Risk",
+      "safety_rating": "Safe",
       "biological_mechanism": "Action mechanism",
       "description": "Functional description and intake guidance",
       "regulatory_status": "Status across FSSAI, FDA, EFSA"
@@ -371,26 +382,12 @@ Return strictly valid JSON:
   ],
   "allergen_alert": {
     "detected": false,
-    "allergen_name": "Identified Allergen",
-    "warning_type": "Allergen Alert / Watch",
+    "allergen_name": "None",
+    "warning_type": "Safe",
     "message": "Specific clinical allergen notice."
   }
 }
 `;
-
-      const parts: any[] = [];
-      const activeImage = selectedImage || offBase64Image;
-
-      if (activeImage) {
-        const cleanBase64 = activeImage.includes(',') ? activeImage.split(',')[1] : activeImage;
-        const mimeType = activeImage.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
-        parts.push({
-          inlineData: {
-            data: cleanBase64,
-            mimeType,
-          },
-        });
-      }
 
       const textPayload = `
 Barcode: ${trimmedBarcode || 'N/A'}
@@ -398,17 +395,21 @@ Product: ${fetchedProductName || 'Determine from visual/barcode'}
 Brand: ${fetchedBrand || 'Determine from visual/barcode'}
 Ingredients: ${fetchedIngredients || 'Examine formulation and extract additives'}
 `;
-      parts.push({ text: textPayload });
 
-      const rawText = await generateContentWithKeyFallback(systemPrompt, parts);
+      // 4000 tokens prevents mid-stream JSON cutoff
+      const rawText = await generateContentWithKeyFallback(systemPrompt, [{ text: textPayload }], 0.1, 4000, false);
       const parsedData = safeExtractJson(rawText);
 
       let finalProductName = parsedData.scan_data?.detected_product_name;
       if (!finalProductName || finalProductName === 'Scanned Food Product' || finalProductName.includes('Unverified Product')) {
         finalProductName = fetchedProductName || (trimmedBarcode ? `Product (${trimmedBarcode})` : 'Scanned Food Product');
       }
-
       const finalBrandName = parsedData.scan_data?.brand_name || fetchedBrand || '';
+
+      let safeAllergenName = parsedData.allergen_alert?.allergen_name;
+      if (typeof safeAllergenName === 'object' && safeAllergenName !== null) {
+        safeAllergenName = safeAllergenName.name || safeAllergenName.allergen || 'Allergen Alert';
+      }
 
       const completeResult: NutriScanResult = {
         ...parsedData,
@@ -438,11 +439,11 @@ Ingredients: ${fetchedIngredients || 'Examine formulation and extract additives'
         additives_detected: Array.isArray(parsedData.additives_detected) ? parsedData.additives_detected : [],
         raw_ingredients_text: fetchedIngredients || userEnteredIngredients || trimmedBarcode || 'Label Formulation Scan',
         image_preview: selectedImage || offImageUrl || undefined,
-        allergen_alert: parsedData.allergen_alert || {
-          detected: false,
-          allergen_name: '',
-          warning_type: '',
-          message: ''
+        allergen_alert: {
+          detected: Boolean(parsedData.allergen_alert?.detected),
+          allergen_name: safeAllergenName || '',
+          warning_type: parsedData.allergen_alert?.warning_type || 'Allergen Alert',
+          message: parsedData.allergen_alert?.message || ''
         },
       };
 
@@ -559,7 +560,6 @@ Ingredients: ${fetchedIngredients || 'Examine formulation and extract additives'
             >
               <span>{isDark ? '☀️ Light' : '🌙 Dark'}</span>
             </button>
-
             <button 
               type="button"
               onClick={() => setShowEthicalBoard(!showEthicalBoard)}

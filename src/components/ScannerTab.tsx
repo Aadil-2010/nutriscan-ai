@@ -119,7 +119,6 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
   
   const customSensitivitiesCount = userPreferences.customSensitivities?.length || 0;
   const totalActiveFlagsCount = activePresetCount + customSensitivitiesCount;
-
   const isInputEmpty = !activeProductName.trim() && !ingredientInput.trim() && !selectedImage && !barcodeInput.trim();
 
   return (
@@ -140,7 +139,6 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6">
         {/* Left Column */}
         <div className="lg:col-span-8 space-y-5 sm:space-y-6">
-
           {/* Item Name Field */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-2">
             <div className="flex items-center justify-between">
@@ -181,7 +179,6 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
                 OpenFoodFacts Engine
               </span>
             </div>
-
             <div className="flex items-center space-x-2">
               <div className="relative flex-1">
                 <input
@@ -235,7 +232,6 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
             <span className="text-xs sm:text-sm font-semibold text-slate-200 block">
               Capture Image / Attach Package Label
             </span>
-
             {selectedImage ? (
               <div className="relative rounded-xl overflow-hidden border border-slate-800 bg-slate-950 p-2 max-h-64 flex items-center justify-center">
                 <img src={selectedImage} alt="Uploaded label" className="max-h-52 object-contain rounded-lg" />
@@ -260,7 +256,6 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
                     <span className="text-[10px] text-slate-400 block sm:mt-0.5">Use laser camera</span>
                   </div>
                 </button>
-
                 <button
                   type="button"
                   onClick={() => openCamera('label')}
@@ -272,7 +267,6 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
                     <span className="text-[10px] text-slate-400 block sm:mt-0.5">Snapshot ingredients</span>
                   </div>
                 </button>
-
                 <div
                   onDragEnter={handleDrag}
                   onDragLeave={handleDrag}
@@ -341,28 +335,24 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
                   <span className="font-bold text-emerald-400">ON</span>
                 </div>
               )}
-
               {userPreferences.gutHealthFocus && (
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-500/40">
                   <span className="truncate mr-2 font-medium">Gut Microbiota Focus</span>
                   <span className="font-bold text-emerald-400">ON</span>
                 </div>
               )}
-
               {userPreferences.kidsSafetyFocus && (
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-500/40">
                   <span className="truncate mr-2 font-medium">Children Hyperactivity Watch</span>
                   <span className="font-bold text-emerald-400">ON</span>
                 </div>
               )}
-
               {userPreferences.fssaiIndiaFocus && (
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-500/40">
                   <span className="truncate mr-2 font-medium">FSSAI / India Limits</span>
                   <span className="font-bold text-emerald-400">ON</span>
                 </div>
               )}
-
               {userPreferences.customSensitivities && userPreferences.customSensitivities.length > 0 && (
                 userPreferences.customSensitivities.map((item: string, idx: number) => (
                   <div key={idx} className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-500/40">
@@ -371,7 +361,6 @@ export const ScannerTab: React.FC<ScannerTabProps> = ({
                   </div>
                 ))
               )}
-
               {totalActiveFlagsCount === 0 && (
                 <div className="p-4 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 text-center text-xs text-slate-500">
                   No active health sensitivities selected. Click <span className="text-emerald-400 font-semibold">Filters</span> in navigation to add active flags.

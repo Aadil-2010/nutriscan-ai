@@ -16,7 +16,7 @@ export interface AdditiveDetail {
   ins_e_number: string;
   name: string;
   functional_class: string;
-  safety_rating: 'Safe' | 'Caution' | 'High Risk';
+  safety_rating: 'Safe' | 'Caution' | 'High Concern' | 'High Risk';
   biological_mechanism?: string;
   description?: string;
   regulatory_status?: string;
@@ -67,7 +67,6 @@ export interface MultiPackageScanResult {
   packages: DetectedPackage[];
 }
 
-// Production-ready Flash models for fast, low-latency evaluation
 const FALLBACK_MODELS = [
   'gemini-2.5-flash-lite',
   'gemini-2.5-flash',
@@ -99,28 +98,58 @@ export function safeExtractJson(rawText: string): any {
   } catch (_) {}
 
   const firstBrace = cleaned.indexOf('{');
-  const lastBrace = cleaned.lastIndexOf('}');
+  if (firstBrace === -1) {
+    throw new Error('AI output did not contain a readable JSON object structure.');
+  }
 
-  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-    const extracted = cleaned.substring(firstBrace, lastBrace + 1);
+  let extracted = cleaned.substring(firstBrace);
+
+  // Direct parse attempt
+  try {
+    return JSON.parse(extracted);
+  } catch (_) {
+    // 1. Strip dangling unfinished key/value tokens at cut-off point
+    extracted = extracted.replace(/,\s*("[^"]*"?\s*:?\s*)?$/, '');
+
+    // 2. Count unclosed brackets and braces
+    let inString = false;
+    let escape = false;
+    let openBraces = 0;
+    let openBrackets = 0;
+
+    for (let i = 0; i < extracted.length; i++) {
+      const char = extracted[i];
+      if (char === '"' && !escape) inString = !inString;
+      if (!inString) {
+        if (char === '{') openBraces++;
+        if (char === '}') openBraces--;
+        if (char === '[') openBrackets++;
+        if (char === ']') openBrackets--;
+      }
+      escape = char === '\\' && !escape;
+    }
+
+    if (inString) extracted += '"';
+
+    let repaired = extracted;
+    for (let i = 0; i < openBrackets; i++) repaired += ']';
+    for (let i = 0; i < openBraces; i++) repaired += '}';
+
     try {
-      return JSON.parse(extracted);
-    } catch (_) {
-      const sanitized = extracted
+      return JSON.parse(repaired);
+    } catch (finalErr) {
+      const sanitized = repaired
         .replace(/,\s*([}\]])/g, '$1')
         .replace(/[\u0000-\u001F]+/g, ' ');
       return JSON.parse(sanitized);
     }
   }
-
-  throw new Error('AI output did not contain a readable JSON object structure.');
 }
 
 function isQuotaOrAuthError(err: any): boolean {
   const msg = String(err?.message || '').toLowerCase();
   const status = String(err?.status || '').toLowerCase();
   const code = Number(err?.code) || Number(err?.status) || 0;
-
   return (
     code === 429 ||
     code === 403 ||
@@ -139,7 +168,6 @@ function isTransientServerError(err: any): boolean {
   const msg = String(err?.message || '').toLowerCase();
   const status = String(err?.status || '').toLowerCase();
   const code = Number(err?.code) || Number(err?.status) || 0;
-
   return (
     code === 503 ||
     code === 500 ||
@@ -156,11 +184,10 @@ export async function generateContentWithKeyFallback(
   systemPrompt: string,
   parts: any[],
   temperature: number = 0.1,
-  maxOutputTokens: number = 1800,
+  maxOutputTokens: number = 4000,
   enableSearch: boolean = false
 ): Promise<string> {
   const keyPool = getApiKeyPool();
-
   if (keyPool.length === 0) {
     throw new Error('No Gemini API keys configured. Please add VITE_GEMINI_API_KEY in your .env file.');
   }
@@ -200,13 +227,11 @@ export async function generateContentWithKeyFallback(
         }
       } catch (err: any) {
         lastError = err;
-
         if (isQuotaOrAuthError(err)) {
-          break; // Key depleted or unauthorized -> hop to next key
+          break;
         }
-
         if (isTransientServerError(err)) {
-          continue; // Model busy -> fall back to next model
+          continue;
         }
       }
     }
@@ -215,94 +240,42 @@ export async function generateContentWithKeyFallback(
   throw lastError || new Error('All configured AI models and keys are currently busy. Please retry.');
 }
 
-/**
- * Evaluates food ingredients against allergies, sensitivities, and toxicological safety.
- * Includes strict anti-hallucination constraints to prevent false allergen flags.
- */
-export async function analyzeIngredientsAndSafety(
-  productName: string,
-  ingredientsText: string,
-  barcode: string = '',
-  offMatched: boolean = false,
-  userAge: string = 'Adult',
-  userWeight: string = '65 kg',
-  activeSensitivities: string[] = []
-): Promise<ProductAnalysisResult> {
-  const trimmedBarcode = barcode.trim();
-  const sensitivitiesList = activeSensitivities.length > 0 ? activeSensitivities.join(', ') : 'None';
-
-  const systemPrompt = `
-You are FoodWise AI, an expert food toxicologist and clinical nutritionist.
-
-CRITICAL INSTRUCTIONS & ANTI-HALLUCINATION RULES:
-1. Base your evaluation EXCLUSIVELY on the provided ingredients text.
-2. Do NOT guess, assume, or hallucinate ingredients from other product flavors (e.g. Lay's Classic Salted contains only potatoes, oil, and salt—do NOT hallucinate onion, garlic, flavor enhancers, or dairy unless they appear explicitly in the ingredients list).
-3. If an ingredient is not explicitly listed, it DOES NOT exist in the product.
-4. If no allergens or active user sensitivities match the explicit ingredients, you MUST set:
-   "allergen_alert": {
-     "detected": false,
-     "allergen_name": "None",
-     "warning_type": "Safe",
-     "message": "No allergen triggers or sensitive ingredients detected in this product."
-   }
-5. If an allergen or sensitivity is present:
-   - For mild intolerances or advisories, set "warning_type": "Watch".
-   - For severe/anaphylactic triggers, set "warning_type": "Danger".
-
-Return STRICT valid JSON matching this schema:
+export async function crossVerifyBarcodeWithWeb(
+  barcode: string,
+  rawTitle: string
+): Promise<BarcodeVerificationResult> {
+  const prompt = `
+A barcode lookup returned: "${rawTitle}" for barcode "${barcode}".
+Search Indian retail platforms (Blinkit, Zepto, BigBasket, Amazon India, GS1 India) for barcode "${barcode}".
+Verify:
+1. Exact commercial product and variant registered to barcode "${barcode}".
+2. Real brand name and exact product title with flavor.
+Return ONLY valid JSON:
 {
-  "scan_data": {
-    "detected_product_name": "${productName}",
-    "brand_name": "Accurate Brand Name",
-    "barcode_detected": ${Boolean(trimmedBarcode)},
-    "barcode_number": "${trimmedBarcode}",
-    "openfoodfacts_matched": ${offMatched}
-  },
-  "product_info": {
-    "total_additives_found": 0,
-    "target_serving_size": "Standard single serve (e.g. 40g)",
-    "age_group_evaluated": "${userAge}"
-  },
-  "overall_analysis": {
-    "health_summary": "2 to 3 sentence clinical and toxicological evaluation tailored to the user's age and weight.",
-    "key_warnings": [],
-    "toxicological_note": "Detailed ADI calculation relative to user weight."
-  },
-  "additives_detected": [
-    {
-      "ins_e_number": "INS Number",
-      "name": "Additive Name",
-      "functional_class": "Functional Class",
-      "safety_rating": "Safe",
-      "biological_mechanism": "Action mechanism",
-      "description": "Functional description and intake guidance",
-      "regulatory_status": "Status across FSSAI, FDA, EFSA"
-    }
-  ],
-  "allergen_alert": {
-    "detected": false,
-    "allergen_name": "Identified Allergen or Sensitivity",
-    "warning_type": "Safe",
-    "message": "Specific clinical notice."
-  }
+  "verified_title": "Real Product Title and Flavor",
+  "verified_brand": "Real Brand Name",
+  "is_corrected": true
 }
 `;
 
-  const userQuery = `
-Product: ${productName}
-Ingredients List: ${ingredientsText || 'No ingredients text supplied. Evaluate product variant name only.'}
-User Profile: Age: ${userAge}, Weight: ${userWeight}
-Active Sensitivity Flags: ${sensitivitiesList}
-`;
-
-  const rawText = await generateContentWithKeyFallback(
-    systemPrompt,
-    [{ text: userQuery }],
-    0.1,
-    1800
-  );
-
-  return safeExtractJson(rawText);
+  try {
+    const rawText = await generateContentWithKeyFallback(
+      'You are a strict Indian FMCG retail identification specialist.',
+      [{ text: prompt }],
+      0.1,
+      800,
+      true
+    );
+    const parsed = safeExtractJson(rawText);
+    return {
+      verifiedTitle: parsed.verified_title || rawTitle,
+      verifiedBrand: parsed.verified_brand || '',
+      isCorrected: Boolean(parsed.is_corrected),
+    };
+  } catch (err) {
+    console.warn('Barcode web verification skipped:', err);
+    return { verifiedTitle: rawTitle, verifiedBrand: '', isCorrected: false };
+  }
 }
 
 export async function detectAllPackagesInFrame(
@@ -316,13 +289,11 @@ export async function detectAllPackagesInFrame(
 
   const systemPrompt = `
 You are FoodWise AI, an expert computer vision food analyst and clinical toxicologist.
-
 SCAN THE IMAGE AND IDENTIFY VISIBLE FOOD PACKAGES:
 1. Identify the exact real brand and product title.
-2. Discern specific variant/flavor strictly from visible package text. Do NOT invent ingredients or confuse flavors.
+2. Discern specific variant/flavor strictly from visible package text.
 3. Extract additives with their INS/E-numbers and assign a safety rating.
-4. Base allergen alerts ONLY on what the packaging indicates. If clean, warning_type is "Safe". If mild/intolerance, "Watch". If severe, "Danger".
-
+4. Base allergen alerts ONLY on what the packaging indicates. Return allergen_name strictly as a plain string, never an object.
 Return STRICT JSON matching this schema:
 {
   "total_packages_detected": 1,
@@ -364,48 +335,8 @@ Return STRICT JSON matching this schema:
     { text: `Detect packages for user (${userAge}, ${userWeight}). Active sensitivities: ${sensitivities}` },
   ];
 
-  const rawText = await generateContentWithKeyFallback(systemPrompt, parts, 0.1, 1600);
+  const rawText = await generateContentWithKeyFallback(systemPrompt, parts, 0.1, 2500);
   return safeExtractJson(rawText);
-}
-
-export async function crossVerifyBarcodeWithWeb(
-  barcode: string,
-  rawTitle: string
-): Promise<BarcodeVerificationResult> {
-  const prompt = `
-A barcode lookup returned: "${rawTitle}" for barcode "${barcode}".
-Search Indian retail platforms (Blinkit, Zepto, BigBasket, Amazon India, GS1 India) for barcode "${barcode}".
-
-Verify:
-1. Exact commercial product and variant registered to barcode "${barcode}".
-2. Real brand name and exact product title with flavor.
-
-Return ONLY valid JSON:
-{
-  "verified_title": "Real Product Title and Flavor",
-  "verified_brand": "Real Brand Name",
-  "is_corrected": true
-}
-`;
-
-  try {
-    const rawText = await generateContentWithKeyFallback(
-      'You are a strict Indian FMCG retail identification specialist.',
-      [{ text: prompt }],
-      0.1,
-      500,
-      true
-    );
-    const parsed = safeExtractJson(rawText);
-    return {
-      verifiedTitle: parsed.verified_title || rawTitle,
-      verifiedBrand: parsed.verified_brand || '',
-      isCorrected: Boolean(parsed.is_corrected),
-    };
-  } catch (err) {
-    console.warn('Barcode web verification skipped:', err);
-    return { verifiedTitle: rawTitle, verifiedBrand: '', isCorrected: false };
-  }
 }
 
 export async function extractMedicalReportContent(
@@ -420,7 +351,6 @@ export async function extractMedicalReportContent(
 You are FoodSense AI, an expert clinical dietitian and toxicologist.
 Extract clinical diagnoses, allergies, food intolerances, and specific chemical food additives (INS/E-numbers) to avoid.
 Only include findings explicitly confirmed in the document.
-
 Return valid JSON:
 {
   "summary": "2-3 sentence clinical summary.",
@@ -440,9 +370,8 @@ Return valid JSON:
   ];
 
   try {
-    const rawText = await generateContentWithKeyFallback(systemPrompt, parts, 0.1, 1000);
+    const rawText = await generateContentWithKeyFallback(systemPrompt, parts, 0.1, 1200);
     const parsed = safeExtractJson(rawText);
-
     return {
       summary: parsed.summary || 'Medical document analyzed and food triggers identified.',
       diagnosed_sensitivities: Array.isArray(parsed.diagnosed_sensitivities) ? parsed.diagnosed_sensitivities : [],
@@ -460,7 +389,6 @@ export async function askHealthChatbot(
   userContext: string
 ): Promise<string> {
   const keyPool = getApiKeyPool();
-
   if (keyPool.length === 0) {
     throw new Error('No API keys configured.');
   }
@@ -468,7 +396,6 @@ export async function askHealthChatbot(
   const systemInstruction = `
 You are FoodSense Health Assistant, an empathetic clinical food safety advisor.
 User Health Context: ${userContext}
-
 Respond in concise, readable paragraphs and bullet points. 
 Do NOT output JSON or code blocks.
 Evaluate questions accurately based strictly on stated ingredients.
@@ -484,6 +411,7 @@ If symptoms suggest severe allergy or anaphylaxis, advise urgent emergency care 
   ];
 
   const poolLen = keyPool.length;
+
   for (let offset = 0; offset < poolLen; offset++) {
     const currentKeyIdx = (cachedWorkingKeyIndex + offset) % poolLen;
     const ai = new GoogleGenAI({ apiKey: keyPool[currentKeyIdx] });

@@ -31,10 +31,16 @@ export const AnalysisResults: React.FC<AnalysisResultsProps> = ({
   onSaveScan,
   isSaved,
 }) => {
-  const { scan_data, product_info, product_name: legacyProductName, additives_detected = [], overall_analysis } = result;
+  const { 
+    scan_data, 
+    product_info, 
+    product_name: legacyProductName, 
+    additives_detected = [], 
+    overall_analysis 
+  } = result as any;
 
   const productName = scan_data?.detected_product_name || legacyProductName || 'Unknown Product';
-  const totalAdditives = product_info?.total_additives_found ?? additives_detected.length;
+  const totalAdditives = additives_detected.length || product_info?.total_additives_found || 0;
 
   const getSafetyBadge = (rating: string) => {
     switch (rating) {
@@ -51,6 +57,7 @@ export const AnalysisResults: React.FC<AnalysisResultsProps> = ({
           label: 'Caution',
         };
       case 'High Concern':
+      case 'High Risk':
         return {
           bg: 'bg-rose-500/15 text-rose-400 border-rose-500/30',
           icon: ShieldAlert,
@@ -66,8 +73,8 @@ export const AnalysisResults: React.FC<AnalysisResultsProps> = ({
   };
 
   const getOverallRiskLevel = () => {
-    const hasHighConcern = additives_detected.some((a) => a.safety_rating === 'High Concern');
-    const hasCaution = additives_detected.some((a) => a.safety_rating === 'Caution');
+    const hasHighConcern = additives_detected.some((a: any) => a.safety_rating === 'High Concern' || a.safety_rating === 'High Risk');
+    const hasCaution = additives_detected.some((a: any) => a.safety_rating === 'Caution');
     if (hasHighConcern) return { title: 'High Additive Concern', color: 'text-rose-400 bg-rose-500/10 border-rose-500/20' };
     if (hasCaution) return { title: 'Moderate Caution Recommended', color: 'text-amber-400 bg-amber-500/10 border-amber-500/20' };
     return { title: 'Generally Safe Profile', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' };
@@ -86,8 +93,7 @@ export const AnalysisResults: React.FC<AnalysisResultsProps> = ({
   };
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto animate-fade-in">
-      
+    <div className="space-y-6 max-w-5xl mx-auto animate-fade-in">
       {/* Product & Executive Summary Card */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-800">
@@ -99,14 +105,12 @@ export const AnalysisResults: React.FC<AnalysisResultsProps> = ({
               <span className="text-xs text-slate-400 font-mono bg-slate-950 px-2.5 py-1 rounded border border-slate-800 whitespace-nowrap">
                 {totalAdditives} Additive{totalAdditives !== 1 ? 's' : ''} Identified
               </span>
-
               {scan_data?.barcode_detected && (
                 <span className="inline-flex items-center px-2.5 py-1 rounded text-xs font-mono bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 whitespace-nowrap">
                   <Barcode className="w-3.5 h-3.5 mr-1 flex-shrink-0" />
                   GTIN: {scan_data.barcode_number || 'Detected'}
                 </span>
               )}
-
               {scan_data?.openfoodfacts_matched && (
                 <span className="inline-flex items-center px-2.5 py-1 rounded text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">
                   <Database className="w-3.5 h-3.5 mr-1 flex-shrink-0" />
@@ -144,7 +148,6 @@ export const AnalysisResults: React.FC<AnalysisResultsProps> = ({
               <BookmarkPlus className="w-4 h-4 flex-shrink-0" />
               <span className="whitespace-nowrap">{isSaved ? 'Saved in History' : 'Save Scan'}</span>
             </button>
-
             <button
               onClick={handleDownloadReport}
               className="flex items-center justify-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all min-h-[40px] flex-1 sm:flex-initial"
@@ -152,7 +155,6 @@ export const AnalysisResults: React.FC<AnalysisResultsProps> = ({
               <Download className="w-4 h-4 flex-shrink-0" />
               <span className="whitespace-nowrap">Export JSON</span>
             </button>
-
             <button
               onClick={onReset}
               className="flex items-center justify-center p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700 transition-all min-h-[40px] min-w-[40px]"
@@ -163,7 +165,7 @@ export const AnalysisResults: React.FC<AnalysisResultsProps> = ({
           </div>
         </div>
 
-        {/* Critical Risk Warnings Banner (Protected with optional chaining) */}
+        {/* Critical Risk Warnings Banner */}
         {overall_analysis?.key_warnings && overall_analysis.key_warnings.length > 0 && (
           <div className="bg-rose-950/40 border border-rose-500/30 rounded-xl p-4 space-y-2">
             <div className="flex items-center space-x-2 text-rose-400 font-bold text-sm">
@@ -171,7 +173,7 @@ export const AnalysisResults: React.FC<AnalysisResultsProps> = ({
               <span>Critical Health & Mechanism Alerts</span>
             </div>
             <ul className="list-disc list-inside space-y-1 text-xs text-rose-200/90 leading-relaxed pl-1">
-              {overall_analysis.key_warnings.map((warning, idx) => (
+              {overall_analysis.key_warnings.map((warning: string, idx: number) => (
                 <li key={idx}>{warning}</li>
               ))}
             </ul>
@@ -220,17 +222,15 @@ export const AnalysisResults: React.FC<AnalysisResultsProps> = ({
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {additives_detected.map((additive, idx) => {
+            {additives_detected.map((additive: any, idx: number) => {
               const badge = getSafetyBadge(additive.safety_rating);
               const BadgeIcon = badge.icon;
-
               return (
                 <div
                   key={idx}
                   onClick={() => onSelectAdditive(additive)}
                   className="bg-slate-900 hover:bg-slate-800/90 border border-slate-800 hover:border-emerald-500/40 rounded-2xl p-5 shadow-xl transition-all cursor-pointer space-y-4 group relative"
                 >
-                  {/* Card Header */}
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="flex items-center space-x-2">
@@ -247,11 +247,9 @@ export const AnalysisResults: React.FC<AnalysisResultsProps> = ({
                       </h4>
                       <p className="text-xs text-slate-400">{additive.functional_class}</p>
                     </div>
-
                     <ExternalLink className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 transition-colors" />
                   </div>
 
-                  {/* Biological Mechanism Tag */}
                   {additive.biological_mechanism && (
                     <div className="text-xs bg-slate-950 p-2.5 rounded-xl border border-slate-800/80 space-y-1">
                       <span className="text-[10px] uppercase font-bold text-slate-400 block">Biological Mechanism</span>
@@ -259,12 +257,10 @@ export const AnalysisResults: React.FC<AnalysisResultsProps> = ({
                     </div>
                   )}
 
-                  {/* Description */}
                   <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed">
                     {additive.description}
                   </p>
 
-                  {/* Regulatory Snippet */}
                   <div className="text-[11px] text-slate-400 pt-2 border-t border-slate-800/60 line-clamp-1">
                     <strong className="text-slate-300">Regulatory:</strong> {additive.regulatory_status}
                   </div>
